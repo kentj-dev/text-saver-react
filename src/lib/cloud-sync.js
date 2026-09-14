@@ -11,8 +11,8 @@ import {
   isValidState,
   saveState,
 } from './storage.js';
-import { getPlanLimits, serializedStateBytes } from './plans.js';
-import { apiRequest, ensureSessionToken } from './licensing.js';
+import { getPlanLimits } from './plans.js';
+import { ensureActiveLicense, licenseApiRequest } from './licensing.js';
 
 export const SYNC_KEY = 'text_saver_cloud_sync';
 export const CLOUD_SYNC_ALARM = 'text-saver-cloud-sync';
@@ -244,54 +244,69 @@ async function saveSyncSettings(settings) {
   return settings;
 }
 
-async function fetchCloud(token) {
+function decodeCloudEnvelope(data) {
+  let envelope;
   try {
-    const response = await apiRequest('/v1/sync', { method: 'GET', token, responseType: 'response' });
-    return {
-      ciphertext: await response.arrayBuffer(),
-      etag: response.headers.get('etag'),
-      salt: response.headers.get('x-sync-salt'),
-      iv: response.headers.get('x-sync-iv'),
-      format: response.headers.get('x-sync-format') || '1',
-    };
-  } catch (error) {
-    if (error.status === 404) return null;
-    throw error;
+    envelope = JSON.parse(data);
+  } catch (_error) {
+    throw new Error('Cloud data has an unsupported format.');
   }
+  if (
+    !envelope
+    || typeof envelope.ciphertext !== 'string'
+    || typeof envelope.salt !== 'string'
+    || typeof envelope.iv !== 'string'
+  ) {
+    throw new Error('Cloud data has an unsupported format.');
+  }
+  return {
+    ciphertext: base64ToBytes(envelope.ciphertext),
+    salt: envelope.salt,
+    iv: envelope.iv,
+    format: String(envelope.format || '1'),
+  };
 }
 
-async function putCloud(token, document, settings, etag) {
-  const plan = getPlanLimits('plus');
+async function fetchCloud(license) {
+  const payload = await licenseApiRequest('/sync/pull', license);
+  const cloud = {
+    revision: Number(payload.revision) || 0,
+    data: payload.data,
+    maxBytes: Number(payload.max_bytes) || getPlanLimits('plus').maxCloudBytes,
+  };
+  return typeof payload.data === 'string'
+    ? { ...cloud, ...decodeCloudEnvelope(payload.data) }
+    : cloud;
+}
+
+async function putCloud(license, document, settings, revision = 0, maxBytes) {
   if (!isValidSyncDocument(document)) throw new Error('Refusing to upload invalid cloud data.');
-  if (serializedStateBytes(document) > plan.maxCloudBytes) {
-    throw new Error('Selected tabs exceed the Plus cloud storage limit.');
-  }
   const keyBytes = base64ToBytes(settings.key);
   const encrypted = await encryptDocument(document, keyBytes);
-  const response = await apiRequest('/v1/sync', {
-    method: 'PUT',
-    token,
-    body: encrypted.ciphertext,
-    responseType: 'response',
-    headers: {
-      'Content-Type': 'application/octet-stream',
-      'X-Sync-Format': String(SYNC_DOCUMENT_VERSION),
-      'X-Sync-Tab-Count': String(document.tabs.length),
-      'X-Sync-Salt': settings.salt,
-      'X-Sync-IV': bytesToBase64(encrypted.iv),
-      ...(etag ? { 'If-Match': etag } : { 'If-None-Match': '*' }),
-    },
+  const data = JSON.stringify({
+    format: SYNC_DOCUMENT_VERSION,
+    salt: settings.salt,
+    iv: bytesToBase64(encrypted.iv),
+    ciphertext: bytesToBase64(new Uint8Array(encrypted.ciphertext)),
   });
-  return response.headers.get('etag');
+  const limit = Number(maxBytes) || getPlanLimits('plus').maxCloudBytes;
+  if (new TextEncoder().encode(data).byteLength > limit) {
+    throw new Error('Selected tabs exceed the Plus cloud storage limit.');
+  }
+  const payload = await licenseApiRequest('/sync/push', license, { revision, data });
+  return {
+    revision: Number(payload.revision),
+    maxBytes: Number(payload.max_bytes) || limit,
+  };
 }
 
 export async function enableCloudSync(password, initialTabIds = []) {
-  const license = await ensureSessionToken();
-  const remote = await fetchCloud(license.sessionToken);
+  const license = await ensureActiveLicense();
+  const remote = await fetchCloud(license);
   const salt = remote?.salt ? base64ToBytes(remote.salt) : crypto.getRandomValues(new Uint8Array(16));
   const keyBytes = await deriveKeyBytes(password, salt);
   let decodedRemote;
-  if (remote) {
+  if (remote?.data) {
     try {
       decodedRemote = await decryptPayload(remote.ciphertext, keyBytes, base64ToBytes(remote.iv), remote.format);
     } catch (_error) {
@@ -309,13 +324,14 @@ export async function enableCloudSync(password, initialTabIds = []) {
     mergedState = applySyncDocument(localState, document);
   }
   const settings = { enabled: true, key: bytesToBase64(keyBytes), salt: bytesToBase64(salt) };
-  const etag = await putCloud(license.sessionToken, document, settings, remote?.etag);
+  const pushed = await putCloud(license, document, settings, remote.revision, remote.maxBytes);
   await saveState(mergedState);
   await saveSyncSettings({
     ...settings,
     selectedTabIds: document.tabs.map((tab) => tab.id),
     baseDocument: clone(document),
-    etag,
+    revision: pushed.revision,
+    maxBytes: pushed.maxBytes,
     lastSyncedAt: Date.now(),
     status: 'synced',
   });
@@ -325,14 +341,14 @@ export async function enableCloudSync(password, initialTabIds = []) {
 export async function syncNow({ retry = true } = {}) {
   const settings = await getSyncSettings();
   if (!settings?.enabled || !settings.key) return null;
-  const license = await ensureSessionToken();
+  const license = await ensureActiveLicense();
   const localState = await getOrMigrateState();
-  const remote = await fetchCloud(license.sessionToken);
+  const remote = await fetchCloud(license);
   const localDocument = createSyncDocument(localState, settings.selectedTabIds || []);
   let mergedState = localState;
   let mergedDocument = localDocument;
   let conflicts = [];
-  if (remote) {
+  if (remote.data) {
     let decoded;
     try {
       decoded = await decryptPayload(
@@ -359,14 +375,15 @@ export async function syncNow({ retry = true } = {}) {
     }
   }
   try {
-    const etag = await putCloud(license.sessionToken, mergedDocument, settings, remote?.etag);
+    const pushed = await putCloud(license, mergedDocument, settings, remote.revision, remote.maxBytes);
     if (!same(localState, mergedState)) await saveState(mergedState);
     await saveSyncSettings({
       ...settings,
       selectedTabIds: mergedDocument.tabs.map((tab) => tab.id),
       baseDocument: clone(mergedDocument),
       baseState: undefined,
-      etag,
+      revision: pushed.revision,
+      maxBytes: pushed.maxBytes,
       lastSyncedAt: Date.now(),
       status: 'synced',
       error: undefined,
@@ -381,10 +398,24 @@ export async function syncNow({ retry = true } = {}) {
 
 export async function resetCloudSync(password) {
   const previous = await getSyncSettings();
-  const license = await ensureSessionToken();
-  await apiRequest('/v1/sync', { method: 'DELETE', token: license.sessionToken });
-  await chrome.storage.local.remove(SYNC_KEY);
-  return enableCloudSync(password, previous?.selectedTabIds || []);
+  const license = await ensureActiveLicense();
+  const remote = await fetchCloud(license);
+  const localState = await getOrMigrateState();
+  const document = createSyncDocument(localState, previous?.selectedTabIds || []);
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const keyBytes = await deriveKeyBytes(password, salt);
+  const settings = { enabled: true, key: bytesToBase64(keyBytes), salt: bytesToBase64(salt) };
+  const pushed = await putCloud(license, document, settings, remote.revision, remote.maxBytes);
+  await saveSyncSettings({
+    ...settings,
+    selectedTabIds: document.tabs.map((tab) => tab.id),
+    baseDocument: clone(document),
+    revision: pushed.revision,
+    maxBytes: pushed.maxBytes,
+    lastSyncedAt: Date.now(),
+    status: 'synced',
+  });
+  return localState;
 }
 
 export async function setSyncedTabIds(tabIds) {
@@ -397,11 +428,7 @@ export async function setSyncedTabIds(tabIds) {
   return syncNow();
 }
 
-export async function disableCloudSync({ deleteRemote = false } = {}) {
-  if (deleteRemote) {
-    const license = await ensureSessionToken();
-    await apiRequest('/v1/sync', { method: 'DELETE', token: license.sessionToken });
-  }
+export async function disableCloudSync() {
   await chrome.storage.local.remove(SYNC_KEY);
 }
 

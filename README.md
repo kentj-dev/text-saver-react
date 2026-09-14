@@ -6,7 +6,7 @@ The paid offering is a single **Plus** lifetime plan at **$2.99**: 20 tabs, 20,0
 
 Cloud selection belongs to the license, not an individual installation. After activating the same license on another device, the user enters the same sync password and the selected tabs are copied into that device without replacing its local-only tabs. The special Context Menu inbox always remains local.
 
-The `/v1/sync` backend record must therefore be keyed by the license entitlement, not by `installationId`. Each installation token authorizes access to that shared encrypted record. Version-two uploads include `X-Sync-Format: 2` and `X-Sync-Tab-Count`; the backend should reject counts above five and enforce the encrypted payload byte limit.
+The Laravel `/api/v1/sync/pull` and `/api/v1/sync/push` endpoints store one opaque string per license. The string contains a versioned, client-encrypted envelope; Laravel never receives the sync password or plaintext notes. Revision numbers provide optimistic conflict detection across devices.
 
 ## Stack
 
@@ -39,6 +39,31 @@ Load `react-extension/dist` as an unpacked extension from `chrome://extensions`.
 
 The build copies `public/manifest.json` and icons into `dist`. Montserrat is bundled by Vite from `@fontsource/montserrat`.
 
-Laravel integration is intentionally disabled for now. Add its HTTPS API URL and the new Plus checkout URL in `src/lib/config.js`, then add the Laravel origin to `public/manifest.json` under `host_permissions`.
+## Laravel licensing integration
 
-The activation response must contain a random, revocable `installationToken`. Text Saver submits the customer license key only to `/v1/licenses/activate` and never persists it. Validation, device management, deactivation, and entitlement-token refresh use the installation token as a Bearer credential. A token stored on the client remains inspectable by the device owner, so the Laravel backend must scope it to one installation and support rotation and revocation.
+The extension is configured for:
+
+- API base URL: `https://apps.asterulabs.com/api/v1`
+- Product slug: `text-saver`
+- Host permission: `https://apps.asterulabs.com/*`
+
+Every API call is a JSON `POST` containing `product`, `license_key`, and the installation's persisted `device_id`. The extension calls:
+
+- `/licenses/activate`
+- `/licenses/validate`
+- `/licenses/deactivate`
+- `/sync/pull`
+- `/sync/push`
+
+The customer license key is stored in `chrome.storage.local` because the central API requires it for later validation, deactivation, and sync. No Creem API key or webhook secret may be placed in this repository.
+
+The checkout URL in `src/lib/config.js` currently uses a Creem test payment link. Replace it with the live product payment link before publishing.
+
+### Creem webhook checklist
+
+1. Deploy the Laravel webhook receiver on a public HTTPS URL and confirm it accepts `POST` without web-session authentication or CSRF.
+2. In the Creem test dashboard, open **Developers > Webhooks**, register that URL, and copy its webhook secret into the matching Laravel environment (never this extension).
+3. Verify the `creem-signature` against the unmodified raw request body using HMAC-SHA256 and the webhook secret.
+4. Process each Creem event ID idempotently and return HTTP 200 after accepting it. At minimum, handle `checkout.completed`; also handle refunds, disputes, and subscription events if subscription plans are introduced.
+5. Use the Laravel licensing dashboard's **Test without a real purchase** instructions to send a signed test `checkout.completed` event. Confirm it creates a license under the `text-saver` Plus plan.
+6. Repeat the webhook registration in Creem live mode, use the separate live webhook secret, and replace the test checkout URL before release.

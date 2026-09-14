@@ -25,7 +25,7 @@ chrome.runtime.onInstalled.addListener(async () => {
 
     const stored = await chrome.storage.local.get(LICENSE_KEY);
     if (stored[LICENSE_KEY]) {
-        await chrome.alarms.create('text-saver-license-validation', { periodInMinutes: 24 * 60 });
+        await chrome.alarms.create('text-saver-license-validation', { periodInMinutes: 12 * 60 });
     }
 });
 
@@ -80,8 +80,12 @@ chrome.runtime.onStartup.addListener(async () => {
 });
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName !== 'local' || !changes[LICENSE_KEY]?.newValue) return;
-    chrome.alarms.create('text-saver-license-validation', { periodInMinutes: 24 * 60 });
+    if (areaName !== 'local' || !changes[LICENSE_KEY]) return;
+    if (changes[LICENSE_KEY].newValue) {
+        chrome.alarms.create('text-saver-license-validation', { periodInMinutes: 12 * 60 });
+    } else {
+        chrome.alarms.clear('text-saver-license-validation');
+    }
 });
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {

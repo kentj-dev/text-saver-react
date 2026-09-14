@@ -51,6 +51,7 @@ function createStorageArea(areaName: string, initial: Record<string, unknown> = 
   },
   runtime: {
     getPlatformInfo: async () => ({ os: 'mac' }),
+    getManifest: () => ({ version: '6.0.0' }),
   },
 };
 

@@ -26,24 +26,27 @@ export type SaverState = {
 };
 
 export type License = {
-  licenseId?: string;
-  licenseFingerprint?: string;
-  installationToken: string;
+  licenseKey?: string;
   installationId: string;
   deviceName: string;
-  instanceId: string;
+  product?: string;
+  plan?: string;
+  billingType?: 'subscription' | 'lifetime';
+  licenseStatus?: 'active' | 'expired' | 'revoked';
+  expiresAt?: string | null;
+  maxDevices?: number;
+  activeDevices?: number;
+  activation?: {
+    deviceId: string;
+    deviceName: string;
+    activatedAt: string;
+    lastSeenAt: string;
+  };
   planId: 'plus';
   status: 'active' | 'offline' | 'invalid';
   lastValidatedAt?: number;
   offlineValidUntil?: number;
-  sessionToken?: string;
-  sessionExpiresAt?: number;
-};
-
-export type Device = {
-  installationId: string;
-  deviceName: string;
-  activatedAt: number;
+  validationError?: string;
 };
 
 export type SyncSettings = {
@@ -52,6 +55,8 @@ export type SyncSettings = {
   status?: string;
   error?: string;
   lastSyncedAt?: number;
+  revision?: number;
+  maxBytes?: number;
 };
 
 export type TextMatch = { start: number; end: number };

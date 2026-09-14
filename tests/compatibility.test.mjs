@@ -7,7 +7,7 @@ import {
   mergeStates,
   mergeSyncDocuments,
 } from '../src/lib/cloud-sync.js';
-import { effectivePlanId, storeLicense } from '../src/lib/licensing.js';
+import { activateLicense, effectivePlanId, storeLicense } from '../src/lib/licensing.js';
 import { getPlanLimits } from '../src/lib/plans.js';
 import { decryptText, encryptText, isValidState } from '../src/lib/storage.js';
 
@@ -64,7 +64,7 @@ test('selective sync merges edits while leaving unselected tabs local', () => {
   assert.equal(applied.tabs.find((item) => item.id === 'local-only').text, 'untouched');
 });
 
-test('the reusable license key is never persisted', async () => {
+test('the central licensing credentials are persisted for later validation', async () => {
   let persisted;
   globalThis.chrome = {
     storage: {
@@ -75,12 +75,62 @@ test('the reusable license key is never persisted', async () => {
   };
   const saved = await storeLicense({
     licenseKey: 'customer-secret-key',
-    installationToken: 'scoped-installation-token',
+    installationId: 'installation-id',
     planId: 'plus',
   });
-  assert.equal('licenseKey' in saved, false);
-  assert.equal('licenseKey' in persisted.text_saver_license, false);
-  assert.equal(persisted.text_saver_license.installationToken, 'scoped-installation-token');
+  assert.equal(saved.licenseKey, 'customer-secret-key');
+  assert.equal(persisted.text_saver_license.licenseKey, 'customer-secret-key');
+  assert.equal(persisted.text_saver_license.installationId, 'installation-id');
+});
+
+test('activation uses the Laravel product and snake-case API contract', async () => {
+  const values = {};
+  let request;
+  globalThis.chrome = {
+    storage: {
+      local: {
+        get: async (key) => ({ [key]: values[key] }),
+        set: async (value) => { Object.assign(values, value); },
+      },
+    },
+    runtime: {
+      getPlatformInfo: async () => ({ os: 'mac' }),
+      getManifest: () => ({ version: '6.0.0' }),
+    },
+  };
+  globalThis.fetch = async (url, options) => {
+    request = { url, options, body: JSON.parse(options.body) };
+    return new Response(JSON.stringify({
+      activated: true,
+      license: {
+        product: 'text-saver',
+        plan: 'Plus',
+        billing_type: 'lifetime',
+        status: 'active',
+        expires_at: null,
+        max_devices: 2,
+        active_devices: 1,
+      },
+      activation: {
+        device_id: request.body.device_id,
+        device_name: 'My Mac',
+        activated_at: '2026-09-14T00:00:00Z',
+        last_seen_at: '2026-09-14T00:00:00Z',
+      },
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+
+  const license = await activateLicense('  license-key  ', 'My Mac');
+  assert.equal(request.url, 'https://apps.asterulabs.com/api/v1/licenses/activate');
+  assert.equal(request.options.method, 'POST');
+  assert.equal(request.body.product, 'text-saver');
+  assert.equal(request.body.license_key, 'license-key');
+  assert.equal(request.body.device_name, 'My Mac');
+  assert.equal(request.body.platform, 'mac');
+  assert.equal(request.body.app_version, '6.0.0');
+  assert.equal(typeof request.body.device_id, 'string');
+  assert.equal(license.status, 'active');
+  assert.equal(values.text_saver_license.licenseKey, 'license-key');
 });
 
 test('React build accepts the existing version-two storage schema', () => {

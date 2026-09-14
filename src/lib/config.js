@@ -1,11 +1,19 @@
-// Replace these public values before publishing. Secrets belong in Worker bindings,
-// never in this extension.
+// These values are public and are bundled into the extension. Creem API keys
+// and webhook secrets belong only in the Laravel backend.
 export const BILLING_CONFIG = Object.freeze({
-  // Add the Laravel API and new $2.99 Plus checkout URLs during integration.
-  apiBaseUrl: 'https://apps.asterulabs.com/api',
+  apiBaseUrl: 'https://apps.asterulabs.com/api/v1',
+  productSlug: 'text-saver',
   plusCheckoutUrl: 'https://www.creem.io/test/payment/prod_3qpZzQmcGSNPpzaLkgJaZQ',
 });
 
+export function isLicensingConfigured() {
+  return /^https:\/\//.test(BILLING_CONFIG.apiBaseUrl) && Boolean(BILLING_CONFIG.productSlug);
+}
+
+export function isCheckoutConfigured() {
+  return /^https:\/\//.test(BILLING_CONFIG.plusCheckoutUrl);
+}
+
 export function isBillingConfigured() {
-  return /^https:\/\//.test(BILLING_CONFIG.apiBaseUrl) && /^https:\/\//.test(BILLING_CONFIG.plusCheckoutUrl);
+  return isLicensingConfigured() && isCheckoutConfigured();
 }

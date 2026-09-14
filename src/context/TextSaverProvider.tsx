@@ -20,7 +20,6 @@ import {
   effectivePlanId,
   getInstallation,
   getStoredLicense,
-  listLicenseDevices,
   validateLicense,
 } from '@/lib/licensing.js';
 import { getPlanLimits, serializedStateBytes } from '@/lib/plans.js';
@@ -50,7 +49,6 @@ import {
   saveState,
 } from '@/lib/storage.js';
 import type {
-  Device,
   License,
   Plan,
   SaverState,
@@ -83,8 +81,6 @@ export function TextSaverProvider({ children }: { children: ReactNode }) {
   const [planOpen, setPlanOpen] = useState(false);
   const [license, setLicense] = useState<License | null>(null);
   const [syncSettings, setSyncSettings] = useState<SyncSettings | null>(null);
-  const [devices, setDevices] = useState<Device[]>([]);
-  const [deviceError, setDeviceError] = useState('');
   const [licenseError, setLicenseError] = useState('');
   const [licenseInput, setLicenseInput] = useState('');
   const [deviceName, setDeviceName] = useState('');
@@ -256,32 +252,15 @@ export function TextSaverProvider({ children }: { children: ReactNode }) {
     return nextLicense;
   }, []);
 
-  const refreshDevices = useCallback(async () => {
-    const currentLicense = (await getStoredLicense()) as License | null;
-    setDeviceError('');
-    if (!currentLicense) {
-      setDevices([]);
-      return;
-    }
-    try {
-      const payload = (await listLicenseDevices(currentLicense)) as { devices?: Device[] };
-      setDevices(payload.devices || []);
-    } catch (error) {
-      setDevices([]);
-      setDeviceError((error as Error).message);
-    }
-  }, []);
-
   const refreshPlan = useCallback(
-    async (loadDevices = false) => {
+    async () => {
       const nextLicense = await refreshEntitlement();
       const installation = (await getInstallation()) as { name: string };
       const settings = (await getSyncSettings()) as SyncSettings | null;
       setDeviceName(nextLicense?.deviceName || installation.name);
       setSyncSettings(settings);
-      if (loadDevices && nextLicense) await refreshDevices();
     },
-    [refreshDevices, refreshEntitlement],
+    [refreshEntitlement],
   );
 
   useEffect(() => {
@@ -842,7 +821,7 @@ export function TextSaverProvider({ children }: { children: ReactNode }) {
     await flushEditor();
     setLicenseError('');
     setPlanOpen(true);
-    await refreshPlan(true);
+    await refreshPlan();
   }
 
   async function handleActivation() {
@@ -853,23 +832,20 @@ export function TextSaverProvider({ children }: { children: ReactNode }) {
     const oldLicense = (await getStoredLicense()) as License | null;
     try {
       const nextLicense = (await activateLicense(key, deviceName)) as License;
-      if (oldLicense && oldLicense.installationToken !== nextLicense.installationToken) {
+      if (oldLicense?.licenseKey && oldLicense.licenseKey !== nextLicense.licenseKey) {
         await disableCloudSync();
         try {
-          await deactivateInstallation(oldLicense, oldLicense.installationId, false);
+          await deactivateInstallation(oldLicense, false);
         } catch {
           setLicenseError('New plan activated, but the previous license still uses a device slot.');
         }
       }
       setLicenseInput('');
-      await refreshPlan(true);
+      await refreshPlan();
       showToast(`${currentPlan(nextLicense).name} activated`);
     } catch (error) {
-      const typed = error as InstanceType<typeof LicenseApiError> & { details?: { devices?: Device[] } };
+      const typed = error as InstanceType<typeof LicenseApiError>;
       setLicenseError(error instanceof LicenseApiError ? typed.message : 'Activation failed. Try again.');
-      if (typed.details?.devices) {
-        setDevices(typed.details.devices);
-      }
     } finally {
       setPlanBusy(false);
     }
@@ -879,34 +855,14 @@ export function TextSaverProvider({ children }: { children: ReactNode }) {
     setPlanBusy(true);
     setLicenseError('');
     try {
-      await validateLicense({ force: true });
-      await refreshPlan(true);
-      showToast('License validated');
+      const checked = (await validateLicense({ force: true })) as License | null;
+      await refreshPlan();
+      if (checked?.status === 'active') showToast('License validated');
+      else if (checked?.status === 'offline') showToast('Server unavailable · offline grace remains active');
+      else setLicenseError('The license could not be validated. Check your connection and try again.');
     } catch (error) {
       setLicenseError((error as Error).message);
       await refreshPlan();
-    } finally {
-      setPlanBusy(false);
-    }
-  }
-
-  async function deactivateDevice(device: Device) {
-    const currentLicense = (await getStoredLicense()) as License | null;
-    if (!currentLicense) return;
-    const confirmed = await ask({
-      title: 'Deactivate device?',
-      message: `This frees the activation used by “${device.deviceName}”. Local notes will not be deleted.`,
-      confirmLabel: 'Deactivate',
-    });
-    if (!confirmed) return;
-    setPlanBusy(true);
-    try {
-      await deactivateInstallation(currentLicense, device.installationId, true);
-      if (device.installationId === currentLicense.installationId) await disableCloudSync();
-      await refreshPlan(true);
-      showToast('Device deactivated');
-    } catch (error) {
-      setLicenseError((error as Error).message);
     } finally {
       setPlanBusy(false);
     }
@@ -985,18 +941,15 @@ export function TextSaverProvider({ children }: { children: ReactNode }) {
   }
 
   async function turnOffSync() {
-    const choice = await ask({
+    const confirmed = await ask({
       title: 'Turn off cloud sync?',
-      message: 'Your local notes remain on this device.',
-      options: [
-        { label: 'Keep encrypted cloud copy', value: 'keep' },
-        { label: 'Delete encrypted cloud copy', value: 'delete' },
-      ],
+      message: 'Your local notes and encrypted cloud copy remain available.',
+      confirmLabel: 'Turn off',
     });
-    if (!choice) return;
+    if (!confirmed) return;
     setPlanBusy(true);
     try {
-      await disableCloudSync({ deleteRemote: choice === 'delete' });
+      await disableCloudSync();
       await refreshPlan();
       showToast('Cloud sync turned off');
     } catch (error) {
@@ -1085,8 +1038,6 @@ export function TextSaverProvider({ children }: { children: ReactNode }) {
         license,
         licenseInput,
         deviceName,
-        devices,
-        deviceError,
         licenseError,
         busy: planBusy,
         syncSettings,
@@ -1117,8 +1068,6 @@ export function TextSaverProvider({ children }: { children: ReactNode }) {
         activateLicense: handleActivation,
         validateLicense: handleValidation,
         deactivateCurrent,
-        refreshDevices,
-        deactivateDevice,
         setupSync,
         syncNow,
         turnOffSync,

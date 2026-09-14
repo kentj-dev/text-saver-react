@@ -2,9 +2,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useTextSaver } from '@/context/TextSaverContext';
 import { formatByteSize, isInbox, licenseStatusText } from '@/lib/app-utils';
-import { BILLING_CONFIG, isBillingConfigured } from '@/lib/config.js';
+import { BILLING_CONFIG, isCheckoutConfigured, isLicensingConfigured } from '@/lib/config.js';
 import { serializedStateBytes } from '@/lib/plans.js';
-import type { Device, SaverTab, SyncSettings } from '@/types';
+import type { SaverTab, SyncSettings } from '@/types';
 import {
   Check,
   Cloud,
@@ -16,7 +16,6 @@ import {
   LoaderCircle,
   RefreshCw,
   ShieldCheck,
-  Trash2,
   X,
 } from 'lucide-react';
 
@@ -26,7 +25,7 @@ function PanelHeader() {
   const { plan, actions } = useTextSaver();
 
   return (
-    <header className="flex min-h-14 items-center justify-between border-b border-border px-4 py-2.5">
+    <header className="flex min-h-14 shrink-0 items-center justify-between border-b border-border px-4 py-2.5">
       <div className="flex items-center gap-2.5">
         <h1 id="plan-heading" className="text-base font-semibold">
           Plan &amp; cloud
@@ -53,7 +52,7 @@ function PlanStatusBar() {
   const storageUsed = state ? serializedStateBytes(state) : 0;
 
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-b border-border bg-muted/20 px-4 py-2">
+    <div className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-b border-border bg-muted/20 px-4 py-2">
       <p
         className="flex min-w-0 items-center gap-1.5 truncate text-[11px] text-muted-foreground"
         title={licenseStatusText(plan.license)}
@@ -75,7 +74,7 @@ function ErrorBanner() {
 
   return (
     <p
-      className="border-b border-destructive/20 bg-destructive/5 px-4 py-1.5 text-[11px] text-destructive"
+      className="shrink-0 border-b border-destructive/20 bg-destructive/5 px-4 py-1.5 text-[11px] text-destructive"
       role="alert"
     >
       {plan.licenseError}
@@ -97,7 +96,7 @@ function SectionHeading({ icon, title, detail }: { icon: React.ReactNode; title:
 
 function ActivationSection() {
   const { plan, actions } = useTextSaver();
-  const configured = isBillingConfigured();
+  const configured = isLicensingConfigured();
 
   return (
     <section className="shrink-0 rounded-lg border border-border bg-card p-3">
@@ -118,9 +117,9 @@ function ActivationSection() {
             className="h-8 px-2.5 text-[12px]"
             type="password"
             autoComplete="off"
-            maxLength={120}
+            maxLength={255}
             value={plan.licenseInput}
-            placeholder={plan.license ? 'Active — key not stored' : 'XXXXXX-XXXXXX-XXXXXX'}
+            placeholder={plan.license ? 'Enter a replacement key' : 'XXXXXX-XXXXXX-XXXXXX'}
             onChange={(event) => actions.setLicenseInput(event.target.value)}
           />
         </label>
@@ -161,74 +160,36 @@ function ActivationSection() {
   );
 }
 
-function DeviceItem({ device }: { device: Device }) {
-  const { plan, actions } = useTextSaver();
-  const isCurrent = device.installationId === plan.license?.installationId;
+function LicenseUsageSection() {
+  const { plan } = useTextSaver();
+  if (!plan.license) return null;
+  const activeDevices = plan.license.activeDevices ?? 0;
+  const maxDevices = plan.license.maxDevices ?? plan.active.maxDevices;
+  const billing = plan.license.billingType === 'lifetime'
+    ? 'Lifetime access'
+    : plan.license.expiresAt
+      ? `Renews or expires ${new Date(plan.license.expiresAt).toLocaleDateString()}`
+      : 'Subscription';
 
   return (
-    <li className="flex min-h-9 items-center justify-between gap-2 rounded-md bg-muted/45 px-2.5 py-1.5">
-      <div className="min-w-0">
-        <p className="truncate text-[12px] font-medium">{device.deviceName}</p>
-        <p className="text-[10px] text-muted-foreground">
-          {isCurrent ? 'This device' : `Added ${new Date(device.activatedAt).toLocaleDateString()}`}
+    <section className="shrink-0 rounded-lg border border-border bg-card p-3">
+      <SectionHeading
+        icon={<HardDrive className="size-4" />}
+        title="License usage"
+        detail={`${activeDevices}/${maxDevices} devices`}
+      />
+      <div className="mt-2 rounded-md bg-muted/45 px-2.5 py-2">
+        <p className="truncate text-[12px] font-medium">{plan.license.deviceName}</p>
+        <p className="mt-0.5 text-[10px] text-muted-foreground">
+          This device · {billing}
         </p>
       </div>
-      {!isCurrent && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-7 shrink-0 text-destructive"
-          disabled={plan.busy}
-          aria-label={`Deactivate ${device.deviceName}`}
-          title={`Deactivate ${device.deviceName}`}
-          onClick={() => actions.deactivateDevice(device)}
-        >
-          <Trash2 />
-        </Button>
-      )}
-    </li>
-  );
-}
-
-function DevicesSection() {
-  const { plan, actions } = useTextSaver();
-  if (!plan.license) return null;
-
-  return (
-    <section className="flex min-h-0 flex-1 flex-col rounded-lg border border-border bg-card p-3">
-      <div className="flex items-center justify-between gap-2">
-        <SectionHeading
-          icon={<HardDrive className="size-4" />}
-          title="Devices"
-          detail={`${plan.devices.length}/${plan.active.maxDevices}`}
-        />
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-7"
-          disabled={plan.busy}
-          aria-label="Refresh devices"
-          title="Refresh devices"
-          onClick={actions.refreshDevices}
-        >
-          <RefreshCw />
-        </Button>
-      </div>
-      {plan.deviceError && <p className="mt-2 text-[11px] text-destructive">{plan.deviceError}</p>}
-      {!plan.deviceError && !plan.devices.length && (
-        <p className="mt-2 text-[11px] text-muted-foreground">No recorded installations.</p>
-      )}
-      <ul className="mt-2 min-h-0 space-y-1.5 overflow-y-auto">
-        {plan.devices.map((device) => (
-          <DeviceItem key={device.installationId} device={device} />
-        ))}
-      </ul>
     </section>
   );
 }
 
 function UpgradePanel() {
-  const configured = isBillingConfigured();
+  const configured = isCheckoutConfigured();
   const features = [
     '20 local tabs',
     '20k characters per tab',
@@ -237,7 +198,7 @@ function UpgradePanel() {
   ];
 
   return (
-    <section className="flex min-h-0 flex-col rounded-lg border border-amber-500/30 bg-card p-4">
+    <section className="flex shrink-0 flex-col rounded-lg border border-amber-500/30 bg-card p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-500">One-time upgrade</p>
@@ -318,7 +279,7 @@ function CloudSyncSection() {
   const enabled = Boolean(plan.syncSettings?.enabled);
 
   return (
-    <section className="flex min-h-0 flex-col rounded-lg border border-border bg-card p-3">
+    <section className="flex shrink-0 flex-col rounded-lg border border-border bg-card p-3">
       <SectionHeading
         icon={enabled ? <Cloud className="size-4 text-amber-500" /> : <CloudOff className="size-4" />}
         title="Cloud sync"
@@ -329,13 +290,13 @@ function CloudSyncSection() {
         Choose which tabs follow your license to another device. Content is encrypted before upload.
       </p>
 
-      <div className="mt-2.5 flex min-h-0 flex-1 flex-col">
+      <div className="mt-2.5 flex flex-col">
         <div className="mb-1.5 flex items-center justify-between text-[10px] font-medium text-muted-foreground">
           <span>Synced tabs</span>
           <span>{formatByteSize(plan.active.maxCloudBytes || 0)} max</span>
         </div>
         {tabs.length ? (
-          <div className="grid min-h-0 grid-cols-2 content-start gap-1.5 overflow-y-auto pr-0.5">
+          <div className="grid max-h-40 min-h-9 grid-cols-2 content-start gap-1.5 overflow-y-auto pr-0.5">
             {tabs.map((tab) => (
               <SyncTabItem key={tab.id} tab={tab} />
             ))}
@@ -384,10 +345,10 @@ export function PlanPanel() {
       <PanelHeader />
       <PlanStatusBar />
       <ErrorBanner />
-      <div className="flex flex-col gap-4 p-4 min-h-0 flex-1 overflow-y-auto">
-        <div className="flex min-h-0 flex-col gap-3 overflow-hidden">
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4">
+        <div className="flex shrink-0 flex-col gap-3">
           <ActivationSection />
-          <DevicesSection />
+          <LicenseUsageSection />
         </div>
         {plan.active.cloudSync ? <CloudSyncSection /> : <UpgradePanel />}
       </div>
