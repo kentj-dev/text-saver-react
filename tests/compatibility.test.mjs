@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { mergeStates } from '../src/lib/cloud-sync.js';
+import {
+  applySyncDocument,
+  createSyncDocument,
+  mergeStates,
+  mergeSyncDocuments,
+} from '../src/lib/cloud-sync.js';
 import { effectivePlanId, storeLicense } from '../src/lib/licensing.js';
 import { getPlanLimits } from '../src/lib/plans.js';
 import { decryptText, encryptText, isValidState } from '../src/lib/storage.js';
@@ -17,9 +22,46 @@ test('React build keeps the published plan limits and entitlement rules', () => 
   assert.equal(getPlanLimits('plus').maxLinesPerTab, 10_000);
   assert.equal(getPlanLimits('plus').maxStateBytes, 5 * 1024 * 1024);
   assert.equal(getPlanLimits('plus').maxCloudBytes, 5 * 1024 * 1024);
+  assert.equal(getPlanLimits('plus').maxSyncedTabs, 5);
+  assert.equal(getPlanLimits('plus').maxDevices, 2);
   assert.equal(effectivePlanId({ planId: 'plus', status: 'offline', offlineValidUntil: Date.now() + 1000 }), 'plus');
   assert.equal(effectivePlanId({ planId: 'pro', status: 'active' }), 'plus');
   assert.equal(effectivePlanId({ planId: 'pro', status: 'invalid' }), 'free');
+});
+
+test('cloud documents contain only explicitly selected tabs', () => {
+  const local = state([tab('local-only', 'private'), tab('shared', 'cloud')]);
+  const document = createSyncDocument(local, ['shared']);
+  assert.deepEqual(document.tabs.map((item) => item.id), ['shared']);
+  assert.equal(document.tabs.some((item) => item.kind === 'inbox'), false);
+});
+
+test('cloud documents enforce the five-tab Plus limit', () => {
+  const tabs = Array.from({ length: 6 }, (_, index) => tab(`tab-${index}`, `${index}`));
+  assert.throws(
+    () => createSyncDocument(state(tabs), tabs.map((item) => item.id)),
+    /up to 5 synced tabs/,
+  );
+});
+
+test('a new device receives synced tabs without losing its local tabs', () => {
+  const firstDevice = state([tab('shared', 'from device one')]);
+  const cloud = createSyncDocument(firstDevice, ['shared']);
+  const secondDevice = state([tab('local', 'from device two')], 'local');
+  const copied = applySyncDocument(secondDevice, cloud);
+  assert.deepEqual(copied.tabs.filter((item) => item.kind === 'normal').map((item) => item.id), ['local', 'shared']);
+  assert.equal(copied.tabs.find((item) => item.id === 'shared').text, 'from device one');
+});
+
+test('selective sync merges edits while leaving unselected tabs local', () => {
+  const base = createSyncDocument(state([tab('shared', 'old')]), ['shared']);
+  const localState = state([tab('local-only', 'untouched'), tab('shared', 'local edit')]);
+  const local = createSyncDocument(localState, ['shared']);
+  const remote = createSyncDocument(state([tab('shared', 'old')]), ['shared']);
+  const merged = mergeSyncDocuments(base, local, remote);
+  const applied = applySyncDocument(localState, merged.document, merged.conflicts);
+  assert.equal(applied.tabs.find((item) => item.id === 'shared').text, 'local edit');
+  assert.equal(applied.tabs.find((item) => item.id === 'local-only').text, 'untouched');
 });
 
 test('the reusable license key is never persisted', async () => {

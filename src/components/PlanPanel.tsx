@@ -1,157 +1,395 @@
-import { Cloud, Crown, ExternalLink, HardDrive, KeyRound, LoaderCircle, RefreshCw, ShieldCheck, Sparkles, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useTextSaver } from '@/context/TextSaverContext';
+import { formatByteSize, isInbox, licenseStatusText } from '@/lib/app-utils';
 import { BILLING_CONFIG, isBillingConfigured } from '@/lib/config.js';
-import type { Device, License, SyncSettings } from '@/types';
+import { serializedStateBytes } from '@/lib/plans.js';
+import type { Device, SaverTab, SyncSettings } from '@/types';
+import {
+  Check,
+  Cloud,
+  CloudOff,
+  Crown,
+  ExternalLink,
+  HardDrive,
+  KeyRound,
+  LoaderCircle,
+  RefreshCw,
+  ShieldCheck,
+  Trash2,
+  X,
+} from 'lucide-react';
 
-type Plan = {
-  id: string;
-  name: string;
-  maxTabs: number;
-  maxStateBytes: number;
-};
+const compactButton = 'h-8 gap-1.5 px-2.5 text-[12px]';
 
-type Props = {
-  open: boolean;
-  onClose: () => void;
-  plan: Plan;
-  usage: string;
-  license: License | null;
-  licenseStatus: string;
-  licenseKey: string;
-  setLicenseKey: (value: string) => void;
-  deviceName: string;
-  setDeviceName: (value: string) => void;
-  devices: Device[];
-  deviceError: string;
-  error: string;
-  busy: boolean;
-  syncSettings: SyncSettings | null;
-  onActivate: () => void;
-  onValidate: () => void;
-  onDeactivateCurrent: () => void;
-  onRefreshDevices: () => void;
-  onDeactivateDevice: (device: Device) => void;
-  onSetupSync: (reset?: boolean) => void;
-  onSyncNow: () => void;
-  onDisableSync: () => void;
-};
+function PanelHeader() {
+  const { plan, actions } = useTextSaver();
 
-function PurchaseCard() {
-  const configured = isBillingConfigured();
   return (
-    <article className="relative overflow-hidden rounded-xl border border-amber-500/40 bg-gradient-to-br from-amber-500/10 to-card p-4">
-      <Crown className="absolute right-4 top-4 size-5 text-amber-500" />
-      <div className="flex items-baseline gap-2">
-        <h3 className="font-semibold">Plus</h3>
-        <span className="text-[11px] text-muted-foreground">$2.99 lifetime</span>
+    <header className="flex min-h-14 items-center justify-between border-b border-border px-4 py-2.5">
+      <div className="flex items-center gap-2.5">
+        <h1 id="plan-heading" className="text-base font-semibold">
+          Plan &amp; cloud
+        </h1>
+        <span className="rounded-full border border-amber-500/35 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-500">
+          {plan.active.name}
+        </span>
       </div>
-      <p className="mb-4 mt-2 min-h-9 text-[12px] leading-relaxed text-muted-foreground">
-        20 tabs, 20k characters and 10k lines per tab, plus 5 MiB encrypted cloud sync.
-      </p>
-      {configured ? (
-        <Button asChild size="sm"><a href={BILLING_CONFIG.plusCheckoutUrl} target="_blank" rel="noreferrer">Buy Plus <ExternalLink /></a></Button>
-      ) : (
-        <Button size="sm" disabled>Checkout coming soon</Button>
-      )}
-    </article>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="size-8"
+        aria-label="Close plan and cloud"
+        onClick={actions.closePlans}
+      >
+        <X />
+      </Button>
+    </header>
   );
 }
 
-export function PlanPanel(props: Props) {
-  if (!props.open) return null;
-  const syncStatus = props.syncSettings?.enabled
-    ? props.syncSettings.status === 'error' || props.syncSettings.status === 'password-required'
-      ? props.syncSettings.error || 'Sync needs attention'
-      : `Last synced ${props.syncSettings.lastSyncedAt ? new Date(props.syncSettings.lastSyncedAt).toLocaleString() : 'never'}`
-    : 'Not configured';
+function PlanStatusBar() {
+  const { state, normalTabCount, plan } = useTextSaver();
+  const storageUsed = state ? serializedStateBytes(state) : 0;
+
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-b border-border bg-muted/20 px-4 py-2">
+      <p
+        className="flex min-w-0 items-center gap-1.5 truncate text-[11px] text-muted-foreground"
+        title={licenseStatusText(plan.license)}
+      >
+        <ShieldCheck className="size-3.5 shrink-0" />
+        <span className="truncate">{licenseStatusText(plan.license)}</span>
+      </p>
+      <p className="whitespace-nowrap text-[11px] text-muted-foreground">
+        {normalTabCount}/{plan.active.maxTabs} tabs · {formatByteSize(storageUsed)}/
+        {formatByteSize(plan.active.maxStateBytes)}
+      </p>
+    </div>
+  );
+}
+
+function ErrorBanner() {
+  const { plan } = useTextSaver();
+  if (!plan.licenseError) return null;
+
+  return (
+    <p
+      className="border-b border-destructive/20 bg-destructive/5 px-4 py-1.5 text-[11px] text-destructive"
+      role="alert"
+    >
+      {plan.licenseError}
+    </p>
+  );
+}
+
+function SectionHeading({ icon, title, detail }: { icon: React.ReactNode; title: string; detail?: string }) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center gap-2">
+        <span className="text-muted-foreground">{icon}</span>
+        <h2 className="text-[13px] font-semibold">{title}</h2>
+      </div>
+      {detail && <span className="text-[10px] text-muted-foreground">{detail}</span>}
+    </div>
+  );
+}
+
+function ActivationSection() {
+  const { plan, actions } = useTextSaver();
+  const configured = isBillingConfigured();
+
+  return (
+    <section className="shrink-0 rounded-lg border border-border bg-card p-3">
+      <SectionHeading icon={<KeyRound className="size-4" />} title={plan.license ? 'License' : 'Activate Plus'} />
+      <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+        {plan.license
+          ? 'This installation is connected to your Plus license.'
+          : 'Use the key from your receipt. One license supports two devices.'}
+      </p>
+      {!configured && !plan.license && (
+        <p className="mt-2 text-[11px] text-destructive">Billing configuration is incomplete.</p>
+      )}
+
+      <div className="mt-2.5 grid grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)] gap-2">
+        <label className="grid gap-1 text-[10px] font-medium text-muted-foreground">
+          License key
+          <Input
+            className="h-8 px-2.5 text-[12px]"
+            type="password"
+            autoComplete="off"
+            maxLength={120}
+            value={plan.licenseInput}
+            placeholder={plan.license ? 'Active — key not stored' : 'XXXXXX-XXXXXX-XXXXXX'}
+            onChange={(event) => actions.setLicenseInput(event.target.value)}
+          />
+        </label>
+        <label className="grid gap-1 text-[10px] font-medium text-muted-foreground">
+          Device name
+          <Input
+            className="h-8 px-2.5 text-[12px]"
+            autoComplete="off"
+            maxLength={80}
+            value={plan.deviceName}
+            onChange={(event) => actions.setDeviceName(event.target.value)}
+          />
+        </label>
+      </div>
+
+      <div className="mt-2.5 flex flex-wrap gap-1.5">
+        <Button className={compactButton} disabled={plan.busy} onClick={actions.activateLicense}>
+          {plan.busy ? <LoaderCircle className="animate-spin" /> : <KeyRound />}
+          {plan.license ? 'Replace key' : 'Activate'}
+        </Button>
+        {plan.license && (
+          <>
+            <Button className={compactButton} variant="outline" disabled={plan.busy} onClick={actions.validateLicense}>
+              <RefreshCw /> Validate
+            </Button>
+            <Button
+              className={compactButton}
+              variant="destructive"
+              disabled={plan.busy}
+              onClick={actions.deactivateCurrent}
+            >
+              Disconnect
+            </Button>
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function DeviceItem({ device }: { device: Device }) {
+  const { plan, actions } = useTextSaver();
+  const isCurrent = device.installationId === plan.license?.installationId;
+
+  return (
+    <li className="flex min-h-9 items-center justify-between gap-2 rounded-md bg-muted/45 px-2.5 py-1.5">
+      <div className="min-w-0">
+        <p className="truncate text-[12px] font-medium">{device.deviceName}</p>
+        <p className="text-[10px] text-muted-foreground">
+          {isCurrent ? 'This device' : `Added ${new Date(device.activatedAt).toLocaleDateString()}`}
+        </p>
+      </div>
+      {!isCurrent && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-7 shrink-0 text-destructive"
+          disabled={plan.busy}
+          aria-label={`Deactivate ${device.deviceName}`}
+          title={`Deactivate ${device.deviceName}`}
+          onClick={() => actions.deactivateDevice(device)}
+        >
+          <Trash2 />
+        </Button>
+      )}
+    </li>
+  );
+}
+
+function DevicesSection() {
+  const { plan, actions } = useTextSaver();
+  if (!plan.license) return null;
+
+  return (
+    <section className="flex min-h-0 flex-1 flex-col rounded-lg border border-border bg-card p-3">
+      <div className="flex items-center justify-between gap-2">
+        <SectionHeading
+          icon={<HardDrive className="size-4" />}
+          title="Devices"
+          detail={`${plan.devices.length}/${plan.active.maxDevices}`}
+        />
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-7"
+          disabled={plan.busy}
+          aria-label="Refresh devices"
+          title="Refresh devices"
+          onClick={actions.refreshDevices}
+        >
+          <RefreshCw />
+        </Button>
+      </div>
+      {plan.deviceError && <p className="mt-2 text-[11px] text-destructive">{plan.deviceError}</p>}
+      {!plan.deviceError && !plan.devices.length && (
+        <p className="mt-2 text-[11px] text-muted-foreground">No recorded installations.</p>
+      )}
+      <ul className="mt-2 min-h-0 space-y-1.5 overflow-y-auto">
+        {plan.devices.map((device) => (
+          <DeviceItem key={device.installationId} device={device} />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function UpgradePanel() {
+  const configured = isBillingConfigured();
+  const features = [
+    '20 local tabs',
+    '20k characters per tab',
+    '5 synced tabs across 2 devices',
+    '5 MiB encrypted cloud storage',
+  ];
+
+  return (
+    <section className="flex min-h-0 flex-col rounded-lg border border-amber-500/30 bg-card p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-500">One-time upgrade</p>
+          <h2 className="mt-1 text-lg font-semibold">Plus</h2>
+        </div>
+        <div className="text-right">
+          <p className="text-lg font-semibold">$2.99</p>
+          <p className="text-[10px] text-muted-foreground">lifetime</p>
+        </div>
+      </div>
+
+      <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
+        More room locally, plus end-to-end encrypted sync for the tabs you choose.
+      </p>
+      <ul className="mt-4 grid gap-2 text-[12px]">
+        {features.map((feature) => (
+          <li key={feature} className="flex items-center gap-2">
+            <span className="grid size-4 place-items-center rounded-full bg-amber-500/10 text-amber-500">
+              <Check className="size-3" />
+            </span>
+            {feature}
+          </li>
+        ))}
+      </ul>
+
+      <div className="mt-auto pt-4">
+        {configured ? (
+          <Button asChild className="h-9 w-full text-[12px]">
+            <a href={BILLING_CONFIG.plusCheckoutUrl} target="_blank" rel="noreferrer">
+              Buy Plus <ExternalLink />
+            </a>
+          </Button>
+        ) : (
+          <Button className="h-9 w-full text-[12px]" disabled>
+            <Crown /> Checkout coming soon
+          </Button>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function formatSyncStatus(settings: SyncSettings | null) {
+  if (!settings?.enabled) return 'Not configured';
+  if (settings.status === 'error' || settings.status === 'password-required') {
+    return settings.error || 'Sync needs attention';
+  }
+  return settings.lastSyncedAt ? `Synced ${new Date(settings.lastSyncedAt).toLocaleString()}` : 'Ready to sync';
+}
+
+function SyncTabItem({ tab }: { tab: SaverTab }) {
+  const { syncedTabIds, plan, actions } = useTextSaver();
+  const selected = syncedTabIds.has(tab.id);
+  const atLimit = syncedTabIds.size >= plan.active.maxSyncedTabs;
+
+  return (
+    <button
+      type="button"
+      className="flex min-h-9 w-full items-center justify-between gap-2 rounded-md border border-border bg-background px-2.5 py-1.5 text-left transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-45"
+      disabled={plan.busy || (!selected && atLimit)}
+      aria-pressed={selected}
+      title={!selected && atLimit ? `You can sync up to ${plan.active.maxSyncedTabs} tabs.` : undefined}
+      onClick={() => actions.toggleTabSync(tab.id)}
+    >
+      <span className="min-w-0 truncate text-[12px] font-medium">{tab.name}</span>
+      <span
+        className={`grid size-4 shrink-0 place-items-center rounded border ${selected ? 'border-amber-500 bg-amber-500 text-black' : 'border-muted-foreground/40'}`}
+      >
+        {selected && <Check className="size-3" />}
+      </span>
+    </button>
+  );
+}
+
+function CloudSyncSection() {
+  const { state, syncedTabIds, plan, actions } = useTextSaver();
+  const tabs = state?.tabs.filter((tab) => !isInbox(tab)) ?? [];
+  const enabled = Boolean(plan.syncSettings?.enabled);
+
+  return (
+    <section className="flex min-h-0 flex-col rounded-lg border border-border bg-card p-3">
+      <SectionHeading
+        icon={enabled ? <Cloud className="size-4 text-amber-500" /> : <CloudOff className="size-4" />}
+        title="Cloud sync"
+        detail={`${syncedTabIds.size}/${plan.active.maxSyncedTabs} tabs`}
+      />
+      <p className="mt-1 text-[11px] text-muted-foreground">{formatSyncStatus(plan.syncSettings)}</p>
+      <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+        Choose which tabs follow your license to another device. Content is encrypted before upload.
+      </p>
+
+      <div className="mt-2.5 flex min-h-0 flex-1 flex-col">
+        <div className="mb-1.5 flex items-center justify-between text-[10px] font-medium text-muted-foreground">
+          <span>Synced tabs</span>
+          <span>{formatByteSize(plan.active.maxCloudBytes || 0)} max</span>
+        </div>
+        {tabs.length ? (
+          <div className="grid min-h-0 grid-cols-2 content-start gap-1.5 overflow-y-auto pr-0.5">
+            {tabs.map((tab) => (
+              <SyncTabItem key={tab.id} tab={tab} />
+            ))}
+          </div>
+        ) : (
+          <p className="rounded-md border border-dashed border-border px-3 py-4 text-center text-[11px] text-muted-foreground">
+            Add a tab to make it available for sync.
+          </p>
+        )}
+      </div>
+
+      <div className="mt-2.5 flex shrink-0 flex-wrap gap-1.5 border-t border-border pt-2.5">
+        {!enabled ? (
+          <Button className={compactButton} disabled={plan.busy} onClick={() => actions.setupSync()}>
+            <Cloud /> Set up sync
+          </Button>
+        ) : (
+          <>
+            <Button className={compactButton} disabled={plan.busy} onClick={actions.syncNow}>
+              {plan.busy ? <LoaderCircle className="animate-spin" /> : <RefreshCw />} Sync now
+            </Button>
+            <Button
+              className={compactButton}
+              variant="outline"
+              disabled={plan.busy}
+              onClick={() => actions.setupSync(true)}
+            >
+              Reset cloud
+            </Button>
+            <Button className={compactButton} variant="destructive" disabled={plan.busy} onClick={actions.turnOffSync}>
+              Turn off
+            </Button>
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
+export function PlanPanel() {
+  const { plan } = useTextSaver();
+  if (!plan.open) return null;
 
   return (
     <section className="fixed inset-0 z-40 flex flex-col bg-background" aria-labelledby="plan-heading">
-      <header className="flex items-center justify-between border-b border-border px-5 py-4">
-        <div>
-          <h1 id="plan-heading" className="flex items-center gap-2 text-lg font-semibold"><Sparkles className="size-5 text-amber-500" />Plan &amp; cloud</h1>
-          <p className="mt-1 text-[12px] text-muted-foreground">Manage your license, devices, and end-to-end encrypted sync.</p>
+      <PanelHeader />
+      <PlanStatusBar />
+      <ErrorBanner />
+      <div className="flex flex-col gap-4 p-4 min-h-0 flex-1 overflow-y-auto">
+        <div className="flex min-h-0 flex-col gap-3 overflow-hidden">
+          <ActivationSection />
+          <DevicesSection />
         </div>
-        <Button variant="ghost" size="icon" aria-label="Close plan and cloud" onClick={props.onClose}><X /></Button>
-      </header>
-
-      <div className="flex-1 space-y-3 overflow-y-auto p-4">
-        <section className="rounded-xl border border-border bg-card p-4 shadow-glow">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-amber-500">{props.plan.name}</span>
-              <strong className="text-sm">{props.plan.name} plan</strong>
-            </div>
-            <span className="text-[12px] text-muted-foreground">{props.usage}</span>
-          </div>
-          <p className="mt-2 flex items-center gap-1.5 text-[12px] text-muted-foreground"><ShieldCheck className="size-4" />{props.licenseStatus}</p>
-        </section>
-
-        <div className="mx-auto w-full max-w-md"><PurchaseCard /></div>
-
-        <section className="rounded-xl border border-border bg-card p-4">
-          <div className="mb-3 flex items-center gap-2"><KeyRound className="size-4 text-muted-foreground" /><h2 className="text-sm font-semibold">Activate a license</h2></div>
-          <p className="mb-3 text-[12px] leading-relaxed text-muted-foreground">Paste the license key from your Creem receipt. Each paid key supports two installations.</p>
-          {!isBillingConfigured() && <p className="mb-3 text-[13px] text-destructive">Billing configuration is incomplete.</p>}
-          <div className="grid grid-cols-[1fr_1fr] gap-2">
-            <label className="grid gap-1.5 text-[12px] text-muted-foreground">License key
-              <Input type="password" autoComplete="off" maxLength={120} value={props.licenseKey} placeholder={props.license ? 'License active — key not stored' : 'XXXXXX-XXXXXX-XXXXXX'} onChange={(event) => props.setLicenseKey(event.target.value)} />
-            </label>
-            <label className="grid gap-1.5 text-[12px] text-muted-foreground">Device name
-              <Input autoComplete="off" maxLength={80} value={props.deviceName} onChange={(event) => props.setDeviceName(event.target.value)} />
-            </label>
-          </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Button size="sm" disabled={props.busy} onClick={props.onActivate}>{props.busy ? <LoaderCircle className="animate-spin" /> : <KeyRound />}Activate</Button>
-            {props.license && <Button size="sm" variant="outline" disabled={props.busy} onClick={props.onValidate}><RefreshCw />Validate now</Button>}
-            {props.license && <Button size="sm" variant="destructive" disabled={props.busy} onClick={props.onDeactivateCurrent}>Deactivate this device</Button>}
-          </div>
-          {props.error && <p className="mt-3 text-[13px] text-destructive" role="alert">{props.error}</p>}
-        </section>
-
-        {props.license && (
-          <section className="rounded-xl border border-border bg-card p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2"><HardDrive className="size-4 text-muted-foreground" /><h2 className="text-sm font-semibold">Activated devices</h2></div>
-              <Button size="sm" variant="ghost" disabled={props.busy} onClick={props.onRefreshDevices}><RefreshCw />Refresh</Button>
-            </div>
-            <div className="mt-3 space-y-1.5">
-              {props.deviceError && <p className="text-[13px] text-destructive">{props.deviceError}</p>}
-              {!props.deviceError && !props.devices.length && <p className="text-[13px] text-muted-foreground">No recorded installations.</p>}
-              {props.devices.map((device) => (
-                <div key={device.installationId} className="flex items-center justify-between rounded-lg bg-muted/60 px-3 py-2">
-                  <div className="min-w-0 truncate text-[13px]">{device.deviceName}{device.installationId === props.license?.installationId && <span className="text-[11px] text-muted-foreground"> (this device)</span>}</div>
-                  <Button size="sm" variant="ghost" className="text-destructive" disabled={props.busy} onClick={() => props.onDeactivateDevice(device)}><Trash2 />Deactivate</Button>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {props.plan.id === 'plus' && (
-          <section className="rounded-xl border border-amber-500/30 bg-card p-4">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2"><Cloud className="size-4 text-amber-500" /><h2 className="text-sm font-semibold">Encrypted cloud sync</h2></div>
-                <p className="mt-1 text-[12px] text-muted-foreground">{syncStatus}</p>
-              </div>
-              <span className="text-[11px] text-muted-foreground">5 MiB maximum</span>
-            </div>
-            <p className="my-3 text-[12px] leading-relaxed text-muted-foreground">Your sync password encrypts notes before upload. It cannot be recovered.</p>
-            <div className="flex flex-wrap gap-2">
-              {!props.syncSettings?.enabled ? (
-                <Button size="sm" onClick={() => props.onSetupSync()} disabled={props.busy}><Cloud />Set up sync</Button>
-              ) : (
-                <>
-                  <Button size="sm" onClick={props.onSyncNow} disabled={props.busy}><RefreshCw />Sync now</Button>
-                  <Button size="sm" variant="outline" onClick={() => props.onSetupSync(true)} disabled={props.busy}>Reset cloud copy</Button>
-                  <Button size="sm" variant="destructive" onClick={props.onDisableSync} disabled={props.busy}>Turn off sync</Button>
-                </>
-              )}
-            </div>
-          </section>
-        )}
+        {plan.active.cloudSync ? <CloudSyncSection /> : <UpgradePanel />}
       </div>
     </section>
   );

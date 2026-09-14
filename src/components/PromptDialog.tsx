@@ -3,14 +3,34 @@ import { AlertTriangle, FileLock2, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import type { PromptConfig } from '@/types';
+import type { PromptConfig, PromptOption, PromptPreview } from '@/types';
+import { useTextSaver } from '@/context/TextSaverContext';
 
 type Props = {
   config: PromptConfig | null;
   onResolve: (value: boolean | string | string[] | null) => void;
 };
 
-export function PromptDialog({ config, onResolve }: Props) {
+function PreviewItem({ item }: { item: PromptPreview }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-md bg-muted/50 px-2.5 py-2">
+      <div className="flex min-w-0 items-center gap-2">
+        {item.protected ? <FileLock2 className="size-4 shrink-0 text-amber-500" /> : <FileText className="size-4 shrink-0 text-muted-foreground" />}
+        <div className="min-w-0">
+          <div className="truncate text-[13px] font-medium">{item.name}</div>
+          <div className="text-[11px] text-muted-foreground">{item.size}</div>
+        </div>
+      </div>
+      <span className={item.conflict ? 'text-[11px] text-destructive' : 'text-[11px] text-muted-foreground'}>{item.status}</span>
+    </div>
+  );
+}
+
+function OptionItem({ option, onSelect }: { option: PromptOption; onSelect: (value: string) => void }) {
+  return <Button variant="outline" className="justify-start" disabled={option.disabled} title={option.title} onClick={() => onSelect(option.value)}>{option.label}</Button>;
+}
+
+function PromptDialogView({ config, onResolve }: Props) {
   const [first, setFirst] = useState('');
   const [second, setSecond] = useState('');
   const [error, setError] = useState('');
@@ -54,16 +74,7 @@ export function PromptDialog({ config, onResolve }: Props) {
         {config?.preview && (
           <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-border bg-background/60 p-1.5">
             {config.preview.map((item, index) => (
-              <div key={`${item.name}-${index}`} className="flex items-center justify-between gap-3 rounded-md bg-muted/50 px-2.5 py-2">
-                <div className="flex min-w-0 items-center gap-2">
-                  {item.protected ? <FileLock2 className="size-4 shrink-0 text-amber-500" /> : <FileText className="size-4 shrink-0 text-muted-foreground" />}
-                  <div className="min-w-0">
-                    <div className="truncate text-[13px] font-medium">{item.name}</div>
-                    <div className="text-[11px] text-muted-foreground">{item.size}</div>
-                  </div>
-                </div>
-                <span className={item.conflict ? 'text-[11px] text-destructive' : 'text-[11px] text-muted-foreground'}>{item.status}</span>
-              </div>
+              <PreviewItem key={`${item.name}-${index}`} item={item} />
             ))}
           </div>
         )}
@@ -89,9 +100,7 @@ export function PromptDialog({ config, onResolve }: Props) {
         {config?.options ? (
           <div className="grid gap-2">
             {config.options.map((option) => (
-              <Button key={option.value} variant="outline" className="justify-start" disabled={option.disabled} title={option.title} onClick={() => onResolve(option.value)}>
-                {option.label}
-              </Button>
+              <OptionItem key={option.value} option={option} onSelect={onResolve} />
             ))}
             <Button variant="ghost" onClick={() => onResolve(null)}>Cancel</Button>
           </div>
@@ -104,4 +113,9 @@ export function PromptDialog({ config, onResolve }: Props) {
       </DialogContent>
     </Dialog>
   );
+}
+
+export function PromptDialog() {
+  const { ui, actions } = useTextSaver();
+  return <PromptDialogView config={ui.promptConfig} onResolve={actions.resolvePrompt} />;
 }

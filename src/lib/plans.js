@@ -9,6 +9,8 @@ export const PLAN_LIMITS = Object.freeze({
     maxCharactersPerTab: 10000,
     maxLinesPerTab: 5000,
     maxStateBytes: 512 * 1024,
+    maxSyncedTabs: 0,
+    maxDevices: 0,
     cloudSync: false,
   }),
   plus: Object.freeze({
@@ -20,6 +22,8 @@ export const PLAN_LIMITS = Object.freeze({
     maxLinesPerTab: 10000,
     maxStateBytes: 5 * 1024 * 1024,
     maxCloudBytes: 5 * 1024 * 1024,
+    maxSyncedTabs: 5,
+    maxDevices: 2,
     cloudSync: true,
   }),
 });

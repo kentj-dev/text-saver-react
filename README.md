@@ -1,8 +1,12 @@
 # Text Saver React extension
 
-This is the React 19 conversion of Text Saver. It keeps the existing Chrome note-storage keys, state schema, encrypted-tab format, and cloud-sync format so it can replace the current popup without losing user notes.
+This is the React 19 conversion of Text Saver. It keeps the existing Chrome note-storage keys, state schema, and encrypted-tab format so it can replace the current popup without losing user notes. It can also read the previous whole-state cloud format and migrate it to selective tab sync.
 
-The paid offering is a single **Plus** lifetime plan at **$2.99**: 20 tabs, 20,000 characters and 10,000 lines per tab, a 5 MiB local-state ceiling, and 5 MiB client-side encrypted sync.
+The paid offering is a single **Plus** lifetime plan at **$2.99**: 20 tabs, 20,000 characters and 10,000 lines per tab, a 5 MiB local-state ceiling, and client-side encrypted sync for up to five selected tabs across two activated devices.
+
+Cloud selection belongs to the license, not an individual installation. After activating the same license on another device, the user enters the same sync password and the selected tabs are copied into that device without replacing its local-only tabs. The special Context Menu inbox always remains local.
+
+The `/v1/sync` backend record must therefore be keyed by the license entitlement, not by `installationId`. Each installation token authorizes access to that shared encrypted record. Version-two uploads include `X-Sync-Format: 2` and `X-Sync-Tab-Count`; the backend should reject counts above five and enforce the encrypted payload byte limit.
 
 ## Stack
 
@@ -11,7 +15,15 @@ The paid offering is a single **Plus** lifetime plan at **$2.99**: 20 tabs, 20,0
 - Shadcn-style local UI components backed by Radix UI
 - Lucide React icons
 - `react-sortablejs` for tab ordering
+- Driver.js for the first-run and replayable product tour
 - Self-hosted Montserrat through `@fontsource/montserrat`
+
+## Frontend structure
+
+- `src/App.tsx` is the composition root only.
+- `src/context/TextSaverProvider.tsx` owns application orchestration and exposes a typed interface through `TextSaverContext`.
+- `src/components` owns layout, section, and repeated item components.
+- `src/hooks` contains reusable UI behavior; `src/lib` contains storage, licensing, sync, and pure helpers.
 
 ## Develop and build
 

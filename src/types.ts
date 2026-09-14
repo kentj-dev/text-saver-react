@@ -48,9 +48,32 @@ export type Device = {
 
 export type SyncSettings = {
   enabled: boolean;
+  selectedTabIds?: string[];
   status?: string;
   error?: string;
   lastSyncedAt?: number;
+};
+
+export type TextMatch = { start: number; end: number };
+
+export type TabContextPosition = {
+  tabId: string;
+  x: number;
+  y: number;
+};
+
+export type Plan = {
+  id: 'free' | 'plus';
+  name: string;
+  price: number;
+  maxTabs: number;
+  maxCharactersPerTab: number;
+  maxLinesPerTab: number;
+  maxStateBytes: number;
+  maxCloudBytes?: number;
+  maxSyncedTabs: number;
+  maxDevices: number;
+  cloudSync: boolean;
 };
 
 export type PromptInput = {
