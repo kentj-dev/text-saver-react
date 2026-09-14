@@ -1,0 +1,83 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+    --background: 48 24% 96%;
+    --foreground: 0 0% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 12%;
+    --primary: 35 92% 45%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 45 14% 90%;
+    --secondary-foreground: 0 0% 16%;
+    --muted: 45 14% 92%;
+    --muted-foreground: 0 0% 40%;
+    --accent: 45 15% 88%;
+    --accent-foreground: 0 0% 14%;
+    --destructive: 4 68% 42%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 45 10% 82%;
+    --input: 45 10% 78%;
+    --ring: 35 92% 45%;
+  }
+
+  .dark {
+    color-scheme: dark;
+    --background: 0 0% 3%;
+    --foreground: 0 0% 96%;
+    --card: 0 0% 7%;
+    --card-foreground: 0 0% 96%;
+    --popover: 0 0% 8%;
+    --popover-foreground: 0 0% 96%;
+    --primary: 35 92% 54%;
+    --primary-foreground: 0 0% 7%;
+    --secondary: 0 0% 13%;
+    --secondary-foreground: 0 0% 96%;
+    --muted: 0 0% 11%;
+    --muted-foreground: 0 0% 63%;
+    --accent: 0 0% 15%;
+    --accent-foreground: 0 0% 96%;
+    --destructive: 2 84% 70%;
+    --destructive-foreground: 0 0% 8%;
+    --border: 0 0% 15%;
+    --input: 0 0% 20%;
+    --ring: 35 92% 54%;
+  }
+
+  * { @apply border-border; }
+  html, body, #root { margin: 0; min-width: 760px; min-height: 590px; }
+  body { @apply bg-background font-sans text-foreground antialiased; }
+  button, textarea, input { font: inherit; }
+  ::selection { background: hsl(var(--primary) / .28); }
+  ::-webkit-scrollbar { width: 9px; height: 9px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: hsl(var(--muted-foreground) / .35); background-clip: padding-box; }
+  ::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground) / .55); background-clip: padding-box; }
+}
+
+@layer components {
+  .context-item {
+    @apply flex w-full items-center gap-2.5 rounded-md px-2.5 py-2.5 text-left text-[13px] outline-none transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-40;
+  }
+}
+
+.line-gutter {
+  scrollbar-width: none;
+}
+
+.line-gutter::-webkit-scrollbar {
+  display: none;
+}
+
+.sortable-ghost {
+  opacity: .35;
+}
+
+.sortable-chosen {
+  cursor: grabbing;
+}

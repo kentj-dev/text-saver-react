@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Text Saver",
+  "description": "Save, organize, protect, and sync text directly from your browser.",
+  "version": "6.0.0",
+  "icons": {
+    "16": "images/16.png",
+    "48": "images/48.png",
+    "128": "images/128.png"
+  },
+  "action": {
+    "default_icon": "images/128.png",
+    "default_popup": "index.html",
+    "default_title": "Text Saver"
+  },
+  "background": {
+    "service_worker": "assets/background.js",
+    "type": "module"
+  },
+  "permissions": ["storage", "unlimitedStorage", "contextMenus", "alarms"],
+  "host_permissions": []
+}
