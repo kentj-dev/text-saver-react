@@ -18,5 +18,5 @@
     "type": "module"
   },
   "permissions": ["storage", "unlimitedStorage", "contextMenus", "alarms"],
-  "host_permissions": ["https://apps.asterulabs.com/*"]
+  "host_permissions": ["https://apps.hamiken.com/*"]
 }

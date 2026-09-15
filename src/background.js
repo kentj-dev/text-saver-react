@@ -11,11 +11,12 @@ import {
     scheduleCloudSync,
     syncNow
 } from './lib/cloud-sync.js';
-import { LICENSE_KEY, effectivePlanId, getStoredLicense, validateLicense } from './lib/licensing.js';
+import { LICENSE_KEY, effectivePlanId, getInstallation, getStoredLicense, validateLicense } from './lib/licensing.js';
 import { getPlanLimits, serializedStateBytes } from './lib/plans.js';
 
 chrome.runtime.onInstalled.addListener(async () => {
     try {
+        await getInstallation();
         await getOrMigrateState();
     } catch (error) {
         console.error('Text Saver could not migrate saved data.', error);
@@ -81,7 +82,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 chrome.runtime.onStartup.addListener(async () => {
     try {
         const license = await validateLicense();
-        if (license) await syncNow();
+        if (license?.status === 'active') await syncNow();
     } catch (error) {
         console.warn('Text Saver startup validation failed.', error.message);
         if (error?.isTemporary) {

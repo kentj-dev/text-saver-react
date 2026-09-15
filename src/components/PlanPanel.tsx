@@ -97,50 +97,58 @@ function SectionHeading({ icon, title, detail }: { icon: React.ReactNode; title:
 function ActivationSection() {
   const { plan, actions } = useTextSaver();
   const configured = isLicensingConfigured();
+  const activated = plan.license?.status === 'active' || plan.license?.status === 'offline_grace';
 
   return (
     <section className="shrink-0 rounded-lg border border-border bg-card p-3">
-      <SectionHeading icon={<KeyRound className="size-4" />} title={plan.license ? 'License' : 'Activate Plus'} />
+      <SectionHeading
+        icon={activated ? <Check className="size-4 text-emerald-500" /> : <KeyRound className="size-4" />}
+        title={activated ? 'Plus activated' : 'Activate Plus'}
+      />
       <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-        {plan.license
-          ? 'This installation is connected to your Plus license.'
+        {activated
+          ? `Plan: Plus · Device: ${plan.license?.deviceName}`
           : 'Use the key from your receipt. One license supports two devices.'}
       </p>
       {!configured && !plan.license && (
         <p className="mt-2 text-[11px] text-destructive">Billing configuration is incomplete.</p>
       )}
 
-      <div className="mt-2.5 grid grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)] gap-2">
-        <label className="grid gap-1 text-[10px] font-medium text-muted-foreground">
-          License key
-          <Input
-            className="h-8 px-2.5 text-[12px]"
-            type="password"
-            autoComplete="off"
-            maxLength={255}
-            value={plan.licenseInput}
-            placeholder={plan.license ? 'Enter a replacement key' : 'XXXXXX-XXXXXX-XXXXXX'}
-            onChange={(event) => actions.setLicenseInput(event.target.value)}
-          />
-        </label>
-        <label className="grid gap-1 text-[10px] font-medium text-muted-foreground">
-          Device name
-          <Input
-            className="h-8 px-2.5 text-[12px]"
-            autoComplete="off"
-            maxLength={80}
-            value={plan.deviceName}
-            onChange={(event) => actions.setDeviceName(event.target.value)}
-          />
-        </label>
-      </div>
+      {!activated && (
+        <div className="mt-2.5 grid grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)] gap-2">
+          <label className="grid gap-1 text-[10px] font-medium text-muted-foreground">
+            License key
+            <Input
+              className="h-8 px-2.5 text-[12px]"
+              type="password"
+              autoComplete="off"
+              maxLength={255}
+              value={plan.licenseInput}
+              placeholder="AST-XXXX-XXXX-XXXX"
+              onChange={(event) => actions.setLicenseInput(event.target.value)}
+            />
+          </label>
+          <label className="grid gap-1 text-[10px] font-medium text-muted-foreground">
+            Device name
+            <Input
+              className="h-8 px-2.5 text-[12px]"
+              autoComplete="off"
+              maxLength={80}
+              value={plan.deviceName}
+              onChange={(event) => actions.setDeviceName(event.target.value)}
+            />
+          </label>
+        </div>
+      )}
 
       <div className="mt-2.5 flex flex-wrap gap-1.5">
-        <Button className={compactButton} disabled={plan.busy} onClick={actions.activateLicense}>
-          {plan.busy ? <LoaderCircle className="animate-spin" /> : <KeyRound />}
-          {plan.license ? 'Replace key' : 'Activate'}
-        </Button>
-        {plan.license && (
+        {!activated && (
+          <Button className={compactButton} disabled={plan.busy} onClick={actions.activateLicense}>
+            {plan.busy ? <LoaderCircle className="animate-spin" /> : <KeyRound />}
+            Activate
+          </Button>
+        )}
+        {activated && (
           <>
             <Button className={compactButton} variant="outline" disabled={plan.busy} onClick={actions.validateLicense}>
               <RefreshCw /> Validate
@@ -162,7 +170,7 @@ function ActivationSection() {
 
 function LicenseUsageSection() {
   const { plan } = useTextSaver();
-  if (!plan.license) return null;
+  if (!plan.license || !['active', 'offline_grace', 'refreshing'].includes(plan.license.status)) return null;
   const activeDevices = plan.license.activeDevices ?? 0;
   const maxDevices = plan.license.maxDevices ?? plan.active.maxDevices;
   const billing = plan.license.billingType === 'lifetime'

@@ -26,10 +26,19 @@ export function formatByteSize(bytes: number) {
 
 export function licenseStatusText(license: License | null) {
   if (!license) return 'No license is active on this installation.';
-  if (license.status === 'offline') {
+  if (license.status === 'offline_grace') {
     return `Offline grace active until ${new Date(license.offlineValidUntil || 0).toLocaleDateString()}.`;
   }
-  if (license.status !== 'active') return 'This license is no longer valid. Your notes remain available.';
+  if (license.status === 'refreshing') return 'Securely renewing this device session…';
+  if (license.status === 'device_revoked') return 'This device was deactivated. Your local notes remain available.';
+  if (license.status === 'revoked') return 'This license was revoked. Your local notes remain available.';
+  if (license.status === 'subscription_expired' || license.status === 'expired') {
+    return 'This plan has expired. Your local notes remain available.';
+  }
+  if (license.status === 'inactive' && ['TOKEN_FAMILY_REVOKED', 'REFRESH_TOKEN_REVOKED', 'INVALID_REFRESH_TOKEN'].includes(license.validationError || '')) {
+    return 'Your session has expired. Activate this device again.';
+  }
+  if (license.status !== 'active') return 'No license is active on this installation.';
   const checkedAt = license.lastValidatedAt ? new Date(license.lastValidatedAt).toLocaleString() : 'never';
   return `Active on this installation · last checked ${checkedAt}`;
 }

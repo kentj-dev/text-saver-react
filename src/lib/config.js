@@ -1,7 +1,7 @@
 // These values are public and are bundled into the extension. Creem API keys
 // and webhook secrets belong only in the Laravel backend.
 export const BILLING_CONFIG = Object.freeze({
-  apiBaseUrl: 'https://apps.asterulabs.com/api/v1',
+  apiBaseUrl: 'https://apps.hamiken.com/api/v1',
   productSlug: 'text-saver',
   plusCheckoutUrl: 'https://www.creem.io/test/payment/prod_3qpZzQmcGSNPpzaLkgJaZQ',
 });

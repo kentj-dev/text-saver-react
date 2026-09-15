@@ -15,6 +15,7 @@ import {
   syncNow as synchronizeNow,
 } from '@/lib/cloud-sync.js';
 import {
+  LICENSE_KEY,
   LicenseApiError,
   activateLicense,
   currentPlan,
@@ -316,7 +317,7 @@ export function TextSaverProvider({ children }: { children: ReactNode }) {
         return;
       }
       if (area !== 'local') return;
-      if (changes.text_saver_license) void refreshEntitlement();
+      if (changes[LICENSE_KEY]) void refreshEntitlement();
       if (changes[SYNC_KEY]) setSyncSettings((changes[SYNC_KEY].newValue as SyncSettings | undefined) || null);
       const incoming = changes.text_saver_state?.newValue as SaverState | undefined;
       if (
@@ -836,13 +837,8 @@ export function TextSaverProvider({ children }: { children: ReactNode }) {
     const oldLicense = (await getStoredLicense()) as License | null;
     try {
       const nextLicense = (await activateLicense(key, deviceName)) as License;
-      if (oldLicense?.licenseKey && oldLicense.licenseKey !== nextLicense.licenseKey) {
+      if (oldLicense) {
         await disableCloudSync();
-        try {
-          await deactivateInstallation(oldLicense, false);
-        } catch {
-          setLicenseError('New plan activated, but the previous license still uses a device slot.');
-        }
       }
       setLicenseInput('');
       await refreshPlan();
@@ -862,7 +858,7 @@ export function TextSaverProvider({ children }: { children: ReactNode }) {
       const checked = (await validateLicense({ force: true })) as License | null;
       await refreshPlan();
       if (checked?.status === 'active') showToast('License validated');
-      else if (checked?.status === 'offline') showToast('Server unavailable · offline grace remains active');
+      else if (checked?.status === 'offline_grace') showToast('Server unavailable · offline grace remains active');
       else setLicenseError('The license could not be validated. Check your connection and try again.');
     } catch (error) {
       setLicenseError((error as Error).message);

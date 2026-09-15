@@ -43,19 +43,24 @@ The build copies `public/manifest.json` and icons into `dist`. Montserrat is bun
 
 The extension is configured for:
 
-- API base URL: `https://apps.asterulabs.com/api/v1`
+- API base URL: `https://apps.hamiken.com/api/v1`
 - Product slug: `text-saver`
-- Host permission: `https://apps.asterulabs.com/*`
+- Host permission: `https://apps.hamiken.com/*`
 
-Every API call is a JSON `POST` containing `product`, `license_key`, and the installation's persisted `device_id`. The extension calls:
+Activation sends the customer-entered license key once with the product, persisted installation UUID, and friendly device name. A successful response must return a short-lived access token, a rotating refresh token, and entitlements. The raw license key is then discarded and is never stored or sent again.
+
+Authenticated requests use `Authorization: Bearer <access_token>`. The centralized API client refreshes expired access tokens through `/auth/refresh`, atomically replaces both tokens, coalesces concurrent refresh attempts, retries a request once, and moves revoked or expired sessions back to an activation state. The extension calls:
 
 - `/licenses/activate`
 - `/licenses/validate`
 - `/licenses/deactivate`
+- `/auth/refresh`
 - `/sync/pull`
 - `/sync/push`
 
-The customer license key is stored in `chrome.storage.local` because the central API requires it for later validation, deactivation, and sync. No Creem API key or webhook secret may be placed in this repository.
+Device credentials are stored in `chrome.storage.local`. This protects them from ordinary websites but not from a user who controls the extension or browser profile. Tokens must therefore be revocable and the backend must validate the license, device, product, subscription, and required entitlement for every premium server operation. Cached entitlements only control local UI and the bounded three-day offline experience.
+
+The licensing implementation is separated into `src/auth`, `src/api`, and `src/storage`. No Creem API key, private signing key, database secret, or webhook secret may be placed in this repository. `DeviceManager` includes a reserved public-key field so a future version can register a device-generated public key without changing the customer-facing activation flow.
 
 The checkout URL in `src/lib/config.js` currently uses a Creem test payment link. Replace it with the live product payment link before publishing.
 

@@ -26,7 +26,6 @@ export type SaverState = {
 };
 
 export type License = {
-  licenseKey?: string;
   installationId: string;
   deviceName: string;
   product?: string;
@@ -42,8 +41,18 @@ export type License = {
     activatedAt: string;
     lastSeenAt: string;
   };
-  planId: 'plus';
-  status: 'active' | 'offline' | 'invalid';
+  features?: string[];
+  planId: 'free' | 'plus';
+  status:
+    | 'inactive'
+    | 'activating'
+    | 'active'
+    | 'refreshing'
+    | 'offline_grace'
+    | 'expired'
+    | 'revoked'
+    | 'device_revoked'
+    | 'subscription_expired';
   lastValidatedAt?: number;
   offlineValidUntil?: number;
   validationError?: string;
