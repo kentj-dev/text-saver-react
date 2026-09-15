@@ -27,18 +27,18 @@ function EditorFooterView({ stats, locked, syncEnabled, syncBusy, onSync, onDown
       </div>
       <div className="flex gap-2">
         {syncEnabled && (
-          <Button size="sm" variant="outline" disabled={syncBusy} onClick={onSync}>
+          <Button size="sm" className="text-blue-400" variant="outline" disabled={syncBusy} onClick={onSync}>
             <CloudUpload />
-            Sync to Cloud
+            {syncBusy ? 'Syncing...' : 'Sync to Cloud'}
           </Button>
         )}
         <Button size="sm" variant="outline" disabled={locked} onClick={onDownload}>
           <Download />
-          Download
+          {!syncEnabled && 'Download'}
         </Button>
         <Button size="sm" variant="outline" disabled={locked} onClick={onCopy}>
           <Copy />
-          Copy Text
+          {!syncEnabled && 'Copy Text'}
         </Button>
       </div>
     </footer>

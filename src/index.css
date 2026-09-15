@@ -82,6 +82,29 @@
   cursor: grabbing;
 }
 
+.loading-glow {
+  background: radial-gradient(circle, hsl(var(--primary) / .11) 0%, hsl(var(--primary) / .035) 42%, transparent 72%);
+  filter: blur(8px);
+}
+
+.loading-progress {
+  animation: loading-progress 1.35s ease-in-out infinite;
+  transform: translateX(-115%);
+}
+
+@keyframes loading-progress {
+  0% { transform: translateX(-115%); }
+  55% { transform: translateX(110%); }
+  100% { transform: translateX(215%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-progress {
+    animation: none;
+    transform: translateX(50%);
+  }
+}
+
 .driver-popover.text-saver-tour {
   max-width: 300px;
   border: 1px solid hsl(var(--border));
