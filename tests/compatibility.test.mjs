@@ -2,8 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  CLOUD_SYNC_ALARM,
+  CLOUD_SYNC_RETRY_DELAY_MS,
+  SYNC_KEY,
   applySyncDocument,
   createSyncDocument,
+  deferCloudSync,
   mergeStates,
   mergeSyncDocuments,
 } from '../src/lib/cloud-sync.js';
@@ -62,6 +66,31 @@ test('selective sync merges edits while leaving unselected tabs local', () => {
   const applied = applySyncDocument(localState, merged.document, merged.conflicts);
   assert.equal(applied.tabs.find((item) => item.id === 'shared').text, 'local edit');
   assert.equal(applied.tabs.find((item) => item.id === 'local-only').text, 'untouched');
+});
+
+test('temporary sync failures preserve a pending state and schedule a retry', async () => {
+  const values = {
+    [SYNC_KEY]: { enabled: true, key: 'encrypted-key', status: 'error', error: 'Network error' },
+  };
+  let alarm;
+  globalThis.chrome = {
+    storage: {
+      local: {
+        get: async (key) => ({ [key]: values[key] }),
+        set: async (value) => { Object.assign(values, value); },
+      },
+    },
+    alarms: {
+      create: async (name, options) => { alarm = { name, ...options }; },
+    },
+  };
+
+  const before = Date.now();
+  await deferCloudSync('Changes are safe locally');
+  assert.equal(values[SYNC_KEY].status, 'pending');
+  assert.equal(values[SYNC_KEY].error, 'Changes are safe locally');
+  assert.equal(alarm.name, CLOUD_SYNC_ALARM);
+  assert.ok(alarm.when >= before + CLOUD_SYNC_RETRY_DELAY_MS);
 });
 
 test('the central licensing credentials are persisted for later validation', async () => {

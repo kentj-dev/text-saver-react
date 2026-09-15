@@ -16,6 +16,8 @@ import { ensureActiveLicense, licenseApiRequest } from './licensing.js';
 
 export const SYNC_KEY = 'text_saver_cloud_sync';
 export const CLOUD_SYNC_ALARM = 'text-saver-cloud-sync';
+export const CLOUD_SYNC_SAFETY_DELAY_MS = 60 * 1000;
+export const CLOUD_SYNC_RETRY_DELAY_MS = 5 * 60 * 1000;
 export const SYNC_DOCUMENT_FORMAT = 'text-saver-cloud-tabs';
 export const SYNC_DOCUMENT_VERSION = 2;
 const LEGACY_SYNC_AAD = new TextEncoder().encode('text-saver-cloud:v1');
@@ -376,7 +378,11 @@ export async function syncNow({ retry = true } = {}) {
   }
   try {
     const pushed = await putCloud(license, mergedDocument, settings, remote.revision, remote.maxBytes);
-    if (!same(localState, mergedState)) await saveState(mergedState);
+    const latestState = await getOrMigrateState();
+    if (!same(localState, latestState)) {
+      mergedState = mergeStates(localState, latestState, mergedState);
+    }
+    if (!same(latestState, mergedState)) await saveState(mergedState);
     await saveSyncSettings({
       ...settings,
       selectedTabIds: mergedDocument.tabs.map((tab) => tab.id),
@@ -432,10 +438,21 @@ export async function disableCloudSync() {
   await chrome.storage.local.remove(SYNC_KEY);
 }
 
-export async function scheduleCloudSync() {
+export async function scheduleCloudSync(delayMs = CLOUD_SYNC_SAFETY_DELAY_MS) {
   const settings = await getSyncSettings();
   if (!settings?.enabled) return;
-  await chrome.alarms.create(CLOUD_SYNC_ALARM, { when: Date.now() + 60 * 1000 });
+  await chrome.alarms.create(CLOUD_SYNC_ALARM, { when: Date.now() + Math.max(0, delayMs) });
+}
+
+export async function deferCloudSync(message, delayMs = CLOUD_SYNC_RETRY_DELAY_MS) {
+  const settings = await getSyncSettings();
+  if (!settings?.enabled) return;
+  await saveSyncSettings({
+    ...settings,
+    status: 'pending',
+    error: message || 'Changes are saved locally and waiting to sync.',
+  });
+  await scheduleCloudSync(delayMs);
 }
 
 export { STATE_KEY };

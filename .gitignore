@@ -30,3 +30,6 @@ yarn-error.log
 /dist
 /dist
 /dist
+/dist/assets
+dist/assets/background.js
+dist/assets/popup.js

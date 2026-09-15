@@ -243,6 +243,9 @@ function UpgradePanel() {
 
 function formatSyncStatus(settings: SyncSettings | null) {
   if (!settings?.enabled) return 'Not configured';
+  if (settings.status === 'pending') {
+    return settings.error || 'Changes are saved locally and waiting to sync';
+  }
   if (settings.status === 'error' || settings.status === 'password-required') {
     return settings.error || 'Sync needs attention';
   }

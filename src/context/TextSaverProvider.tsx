@@ -4,9 +4,11 @@ import { usePrompt } from '@/hooks/use-prompt';
 import { useProductTour } from '@/hooks/use-product-tour';
 import { useToast } from '@/hooks/use-toast';
 import {
+  deferCloudSync,
   disableCloudSync,
   enableCloudSync,
   getSyncSettings,
+  mergeStates,
   resetCloudSync,
   SYNC_KEY,
   setSyncedTabIds,
@@ -24,6 +26,7 @@ import {
 } from '@/lib/licensing.js';
 import { getPlanLimits, serializedStateBytes } from '@/lib/plans.js';
 import {
+  AUTO_SYNC_DELAY,
   AUTOSAVE_DELAY,
   BACKUP_FORMAT,
   BACKUP_VERSION,
@@ -72,6 +75,9 @@ export function TextSaverProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'error'>('idle');
   const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const cloudSyncTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const cloudSyncPending = useRef(false);
+  const cloudSyncInFlight = useRef<Promise<void> | null>(null);
   const saveQueue = useRef(Promise.resolve());
   const editPending = useRef(false);
   const { toast, showToast } = useToast();
@@ -285,12 +291,7 @@ export function TextSaverProvider({ children }: { children: ReactNode }) {
           startGuide();
         }
         if (effectivePlanId(nextLicense) === 'plus' && settings?.enabled) {
-          (synchronizeNow() as Promise<SaverState | null>)
-            .then((synced) => {
-              if (!active || !synced) return;
-              void applyIncomingState(synced);
-            })
-            .catch((error: Error) => console.warn('Text Saver cloud sync failed.', error.message));
+          queueCloudSync(0);
         }
       } catch (error) {
         console.error('Text Saver could not load saved data.', error);
@@ -300,6 +301,7 @@ export function TextSaverProvider({ children }: { children: ReactNode }) {
     return () => {
       active = false;
       clearTimeout(saveTimer.current);
+      clearTimeout(cloudSyncTimer.current);
       lockTimers.current.forEach(clearTimeout);
     };
   }, [applyIncomingState, displayState, refreshEntitlement, startGuide]);
@@ -321,6 +323,7 @@ export function TextSaverProvider({ children }: { children: ReactNode }) {
         incoming &&
         isValidState(incoming) &&
         !editPending.current &&
+        !cloudSyncInFlight.current &&
         JSON.stringify(incoming) !== JSON.stringify(stateRef.current)
       ) {
         void applyIncomingState(clone(incoming));
@@ -407,6 +410,7 @@ export function TextSaverProvider({ children }: { children: ReactNode }) {
     setSaveStatus('saving');
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => void flushEditor(), AUTOSAVE_DELAY);
+    if (syncSettings?.enabled && activeTab && syncedTabIds.has(activeTab.id)) queueCloudSync();
     const ratio = Math.max(
       value.length / activePlan.maxCharactersPerTab,
       (value ? value.split('\n').length : 0) / activePlan.maxLinesPerTab,
@@ -923,22 +927,102 @@ export function TextSaverProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  async function syncNow() {
-    setPlanBusy(true);
-    setLicenseError('');
+  function offlineSyncMessage() {
+    return 'Offline or server unavailable · changes are safe locally and will retry.';
+  }
+
+  function isRetryableSyncError(error: unknown) {
+    return !navigator.onLine || (error instanceof LicenseApiError && error.isTemporary);
+  }
+
+  function queueCloudSync(delay = AUTO_SYNC_DELAY) {
+    cloudSyncPending.current = true;
+    clearTimeout(cloudSyncTimer.current);
+    cloudSyncTimer.current = setTimeout(() => {
+      cloudSyncTimer.current = undefined;
+      void runCloudSync(false);
+    }, delay);
+  }
+
+  async function runCloudSync(notify: boolean) {
+    clearTimeout(cloudSyncTimer.current);
+    cloudSyncTimer.current = undefined;
+    cloudSyncPending.current = true;
+
     try {
       await flushEditor();
-      const synced = (await synchronizeNow()) as SaverState | null;
-      if (synced) await applyIncomingState(synced);
+    } catch {
+      const message = 'Local save failed · cloud sync postponed to protect this edit';
+      setLicenseError(message);
+      if (notify) showToast(message);
+      return;
+    }
+
+    if (!navigator.onLine) {
+      await deferCloudSync(offlineSyncMessage());
       await refreshPlan();
-      showToast('Cloud sync complete');
+      if (notify) showToast('You’re offline · changes are saved locally and queued for sync');
+      return;
+    }
+
+    if (cloudSyncInFlight.current) {
+      return;
+    }
+
+    setPlanBusy(true);
+    setLicenseError('');
+    cloudSyncPending.current = false;
+    const beforeSync = clone(stateRef.current!);
+    const request = (async () => {
+      const synced = (await synchronizeNow()) as SaverState | null;
+      if (synced) {
+        await flushEditor();
+        const latest = stateRef.current!;
+        const reconciled = JSON.stringify(latest) === JSON.stringify(beforeSync)
+          ? synced
+          : mergeStates(beforeSync, latest, synced) as SaverState;
+        await persist(reconciled);
+        await applyIncomingState(reconciled);
+      }
+      await refreshPlan();
+    })();
+    cloudSyncInFlight.current = request;
+    let succeeded = false;
+    try {
+      await request;
+      succeeded = true;
+      if (notify) showToast('Cloud sync complete');
     } catch (error) {
-      setLicenseError((error as Error).message);
+      const message = (error as Error).message;
+      setLicenseError(message);
+      if (isRetryableSyncError(error)) {
+        cloudSyncPending.current = true;
+        await deferCloudSync(offlineSyncMessage());
+        if (notify) showToast('Could not reach the cloud · changes are saved locally and will retry');
+      } else if (notify) {
+        showToast(message);
+      }
       await refreshPlan();
     } finally {
+      cloudSyncInFlight.current = null;
       setPlanBusy(false);
+      if (succeeded && cloudSyncPending.current && navigator.onLine) queueCloudSync();
     }
   }
+
+  async function syncNow() {
+    await runCloudSync(true);
+  }
+
+  useEffect(() => {
+    function retryPendingSync() {
+      if (syncSettings?.enabled && (cloudSyncPending.current || syncSettings.status === 'pending')) {
+        queueCloudSync(0);
+      }
+    }
+    window.addEventListener('online', retryPendingSync);
+    return () => window.removeEventListener('online', retryPendingSync);
+  }, [syncSettings?.enabled, syncSettings?.status]);
 
   async function turnOffSync() {
     const confirmed = await ask({
@@ -950,6 +1034,8 @@ export function TextSaverProvider({ children }: { children: ReactNode }) {
     setPlanBusy(true);
     try {
       await disableCloudSync();
+      clearTimeout(cloudSyncTimer.current);
+      cloudSyncPending.current = false;
       await refreshPlan();
       showToast('Cloud sync turned off');
     } catch (error) {

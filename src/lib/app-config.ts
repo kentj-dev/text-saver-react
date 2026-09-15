@@ -1,4 +1,5 @@
 export const AUTOSAVE_DELAY = 300;
+export const AUTO_SYNC_DELAY = 1500;
 export const MIN_PASSWORD_LENGTH = 8;
 export const THEME_KEY = 'text_saver_theme';
 export const GUIDE_SEEN_KEY = 'text_saver_guide_seen_v1';

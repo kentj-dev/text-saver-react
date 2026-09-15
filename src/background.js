@@ -5,7 +5,12 @@ import {
     getOrMigrateState,
     saveState
 } from './lib/storage.js';
-import { CLOUD_SYNC_ALARM, scheduleCloudSync, syncNow } from './lib/cloud-sync.js';
+import {
+    CLOUD_SYNC_ALARM,
+    deferCloudSync,
+    scheduleCloudSync,
+    syncNow
+} from './lib/cloud-sync.js';
 import { LICENSE_KEY, effectivePlanId, getStoredLicense, validateLicense } from './lib/licensing.js';
 import { getPlanLimits, serializedStateBytes } from './lib/plans.js';
 
@@ -57,6 +62,9 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
             await syncNow();
         } catch (error) {
             console.warn('Text Saver background sync failed.', error.message);
+            if (error?.isTemporary) {
+                await deferCloudSync('Offline or server unavailable · changes are safe locally and will retry.');
+            }
         }
         return;
     }
@@ -76,6 +84,9 @@ chrome.runtime.onStartup.addListener(async () => {
         if (license) await syncNow();
     } catch (error) {
         console.warn('Text Saver startup validation failed.', error.message);
+        if (error?.isTemporary) {
+            await deferCloudSync('Offline or server unavailable · changes are safe locally and will retry.');
+        }
     }
 });
 
