@@ -25,6 +25,8 @@ import {
 } from "./auth/licensingService.ts";
 import { getPlanLimits, serializedStateBytes } from "./lib/plans.js";
 
+const THANK_YOU_URL = "https://apps.hamiken.com/apps/text-saver/thank-you";
+
 globalThis.__TEXT_SAVER_LICENSING_SERVICE__ = runLicensingCommand;
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -33,7 +35,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   return true;
 });
 
-chrome.runtime.onInstalled.addListener(async () => {
+chrome.runtime.onInstalled.addListener(async ({ reason }) => {
+  if (reason === "install") {
+    chrome.tabs.create({ url: THANK_YOU_URL }).catch((error) =>
+      console.warn("Text Saver could not open the thank-you page.", error),
+    );
+  }
+
   try {
     await getInstallation();
     await getOrMigrateState();
