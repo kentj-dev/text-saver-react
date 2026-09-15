@@ -1,9 +1,9 @@
-export const DEFAULT_PLAN_ID = 'free';
+export const DEFAULT_PLAN_ID = "free";
 
 export const PLAN_LIMITS = Object.freeze({
   free: Object.freeze({
-    id: 'free',
-    name: 'Free',
+    id: "free",
+    name: "Free",
     price: 0,
     maxTabs: 10,
     maxCharactersPerTab: 10000,
@@ -14,8 +14,8 @@ export const PLAN_LIMITS = Object.freeze({
     cloudSync: false,
   }),
   plus: Object.freeze({
-    id: 'plus',
-    name: 'Plus',
+    id: "plus",
+    name: "Plus",
     price: 2.99,
     maxTabs: 20,
     maxCharactersPerTab: 20000,
@@ -33,7 +33,7 @@ export function getPlanLimits(planId = DEFAULT_PLAN_ID) {
 }
 
 export function isPaidPlan(planId) {
-  return planId === 'plus';
+  return planId === "plus";
 }
 
 export function serializedStateBytes(state) {

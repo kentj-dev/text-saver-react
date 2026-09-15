@@ -1,15 +1,15 @@
-import { Button } from '@/components/ui/button';
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { useTextSaver } from '@/context/TextSaverContext';
-import { isEncryptedTab, isInbox } from '@/lib/app-utils';
-import { cn } from '@/lib/utils';
-import type { SaverTab } from '@/types';
+} from "@/components/ui/dropdown-menu";
+import { useTextSaver } from "@/context/TextSaverContext";
+import { isEncryptedTab, isInbox } from "@/lib/app-utils";
+import { cn } from "@/lib/utils";
+import type { SaverTab } from "@/types";
 import {
   Cloud,
   Ellipsis,
@@ -24,14 +24,14 @@ import {
   Sun,
   Trash2,
   Unlock,
-} from 'lucide-react';
-import { useRef } from 'react';
+} from "lucide-react";
+import { useRef } from "react";
 
 type Props = {
   planName: string;
   isPlusPlan: boolean;
-  saveStatus: 'idle' | 'saving' | 'error';
-  theme: 'dark' | 'light';
+  saveStatus: "idle" | "saving" | "error";
+  theme: "dark" | "light";
   activeTab: SaverTab;
   locked: boolean;
   normalTabCount: number;
@@ -51,27 +51,46 @@ function AppHeaderView(props: Props) {
   return (
     <header className="flex min-h-12 items-center justify-between border-b border-border pb-2.5">
       <div className="brand flex items-center gap-2.5" data-tour="welcome">
-        <img src="/images/128.png" alt="Text Saver" className="size-8 rounded-md" />
+        <img
+          src="/images/128.png"
+          alt="Text Saver"
+          className="size-8 rounded-md"
+        />
         <div className="flex items-center gap-1">
           <div className="text-[17px] font-bold leading-tight">Text Saver</div>
-          {props.isPlusPlan && <div className="text-amber-600 font-bold italic text-2xl">+</div>}
+          {props.isPlusPlan && (
+            <div className="text-amber-600 font-bold italic text-2xl">+</div>
+          )}
         </div>
       </div>
       <div className="flex items-center gap-0.5">
         <span
-          className={cn('mr-1 text-[11px] text-muted-foreground', props.saveStatus === 'error' && 'text-destructive')}
+          className={cn(
+            "mr-1 text-[11px] text-muted-foreground",
+            props.saveStatus === "error" && "text-destructive",
+          )}
         >
-          {props.saveStatus === 'saving' ? 'Saving…' : props.saveStatus === 'error' ? 'Save failed' : ''}
+          {props.saveStatus === "saving"
+            ? "Saving…"
+            : props.saveStatus === "error"
+              ? "Save failed"
+              : ""}
         </span>
         <Button
           variant="ghost"
           size="icon"
-          title={`Switch to ${props.theme === 'dark' ? 'light' : 'dark'} mode`}
+          title={`Switch to ${props.theme === "dark" ? "light" : "dark"} mode`}
           onClick={props.onToggleTheme}
         >
-          {props.theme === 'dark' ? <Sun /> : <Moon />}
+          {props.theme === "dark" ? <Sun /> : <Moon />}
         </Button>
-        <Button variant="ghost" size="icon" title="Find in tab" data-tour="find" onClick={props.onOpenFind}>
+        <Button
+          variant="ghost"
+          size="icon"
+          title="Find in tab"
+          data-tour="find"
+          onClick={props.onOpenFind}
+        >
           <Search />
         </Button>
         {!isInbox(props.activeTab) && (
@@ -81,11 +100,19 @@ function AppHeaderView(props: Props) {
               size="icon"
               data-tour="security"
               title={
-                isEncryptedTab(props.activeTab) ? (props.locked ? 'Unlock tab' : 'Password options') : 'Set password'
+                isEncryptedTab(props.activeTab)
+                  ? props.locked
+                    ? "Unlock tab"
+                    : "Password options"
+                  : "Set password"
               }
               onClick={() => props.onSecurity(props.activeTab.id)}
             >
-              {isEncryptedTab(props.activeTab) && props.locked ? <Unlock /> : <Lock />}
+              {isEncryptedTab(props.activeTab) && props.locked ? (
+                <Unlock />
+              ) : (
+                <Lock />
+              )}
             </Button>
             <Button
               variant="ghost"
@@ -108,7 +135,12 @@ function AppHeaderView(props: Props) {
         )}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" aria-label="More options" data-tour="more">
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="More options"
+              data-tour="more"
+            >
               <Ellipsis />
             </Button>
           </DropdownMenuTrigger>
@@ -132,7 +164,7 @@ function AppHeaderView(props: Props) {
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
-              <a href="https://bit.ly/4xDbvkk" target="_blank" rel="noreferrer">
+              <a href="https://kentjohn.com" target="_blank" rel="noreferrer">
                 <KeyRound />
                 Developer
               </a>
@@ -146,7 +178,7 @@ function AppHeaderView(props: Props) {
           accept="application/json,.json"
           onChange={(event) => {
             const file = event.target.files?.[0];
-            event.target.value = '';
+            event.target.value = "";
             props.onImportBackup(file);
           }}
         />
@@ -156,12 +188,13 @@ function AppHeaderView(props: Props) {
 }
 
 export function AppHeader() {
-  const { activeTab, normalTabCount, editor, plan, ui, actions } = useTextSaver();
+  const { activeTab, normalTabCount, editor, plan, ui, actions } =
+    useTextSaver();
   if (!activeTab) return null;
   return (
     <AppHeaderView
       planName={plan.active.name}
-      isPlusPlan={plan.active.id === 'plus'}
+      isPlusPlan={plan.active.id === "plus"}
       saveStatus={ui.saveStatus}
       theme={ui.theme}
       activeTab={activeTab}

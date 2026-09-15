@@ -1,32 +1,45 @@
-import { apiClient, type ApiClient } from '../api/client.ts';
-import { ApiError, statusForError } from '../api/errors.ts';
-import { SecureStorage } from '../storage/secureStorage.ts';
-import { deviceManager, type DeviceManager } from './deviceManager.ts';
-import { entitlementService, type EntitlementService } from './entitlementService.ts';
-import { parseTokenSet } from './tokenManager.ts';
-import type { AuthSession, DeviceRegistration } from './types.ts';
+import { apiClient, type ApiClient } from "../api/client.ts";
+import { ApiError, statusForError } from "../api/errors.ts";
+import { SecureStorage } from "../storage/secureStorage.ts";
+import { deviceManager, type DeviceManager } from "./deviceManager.ts";
+import {
+  entitlementService,
+  type EntitlementService,
+} from "./entitlementService.ts";
+import { parseTokenSet } from "./tokenManager.ts";
+import type { AuthSession, DeviceRegistration } from "./types.ts";
 
 type Payload = Record<string, unknown>;
 
-function registration(payload: Payload, fallbackName: string): DeviceRegistration {
-  const raw = payload.device && typeof payload.device === 'object'
-    ? payload.device as Record<string, unknown>
-    : {};
+function registration(
+  payload: Payload,
+  fallbackName: string,
+): DeviceRegistration {
+  const raw =
+    payload.device && typeof payload.device === "object"
+      ? (payload.device as Record<string, unknown>)
+      : {};
   return {
     deviceId: raw.id == null ? undefined : String(raw.id),
     deviceName: String(raw.device_name || fallbackName),
     platform: raw.platform == null ? undefined : String(raw.platform),
     appVersion: raw.app_version == null ? undefined : String(raw.app_version),
-    activatedAt: raw.activated_at == null ? undefined : String(raw.activated_at),
+    activatedAt:
+      raw.activated_at == null ? undefined : String(raw.activated_at),
     lastSeenAt: raw.last_seen_at == null ? undefined : String(raw.last_seen_at),
   };
 }
 
-function statusFromEntitlements(entitlements: ReturnType<EntitlementService['fromPayload']>): AuthSession['status'] {
+function statusFromEntitlements(
+  entitlements: ReturnType<EntitlementService["fromPayload"]>,
+): AuthSession["status"] {
   switch (entitlements.licenseStatus?.toLowerCase()) {
-    case 'expired': return 'expired';
-    case 'revoked': return 'revoked';
-    default: return 'active';
+    case "expired":
+      return "expired";
+    case "revoked":
+      return "revoked";
+    default:
+      return "active";
   }
 }
 
@@ -50,44 +63,77 @@ export class AuthService {
 
   async session(): Promise<AuthSession | null> {
     const session = await this.storage.getSession();
-    if (session?.status === 'offline_grace' && !this.entitlements.isOfflineGraceAvailable(session)) {
+    if (
+      session?.status === "offline_grace" &&
+      !this.entitlements.isOfflineGraceAvailable(session)
+    ) {
       // Lock local paid features, but retain the revocable credentials so the
       // service worker can recover automatically when connectivity returns.
-      const expired = { ...session, status: 'offline_locked' as const, errorCode: 'OFFLINE_GRACE_EXPIRED' };
+      const expired = {
+        ...session,
+        status: "offline_locked" as const,
+        errorCode: "OFFLINE_GRACE_EXPIRED",
+      };
       await this.storage.setSession(expired);
       return expired;
     }
     return session;
   }
 
-  async activate(licenseKey: string, requestedDeviceName?: string): Promise<AuthSession> {
+  async activate(
+    licenseKey: string,
+    requestedDeviceName?: string,
+  ): Promise<AuthSession> {
     const rawKey = licenseKey.trim();
-    if (!rawKey) throw new ApiError('Enter your license key.', 'LICENSE_KEY_REQUIRED', 400);
+    if (!rawKey)
+      throw new ApiError(
+        "Enter your license key.",
+        "LICENSE_KEY_REQUIRED",
+        400,
+      );
     const previous = await this.storage.getSession();
     let installation = await this.devices.getOrCreate();
-    if (requestedDeviceName?.trim()) installation = await this.devices.rename(requestedDeviceName);
+    if (requestedDeviceName?.trim())
+      installation = await this.devices.rename(requestedDeviceName);
     await this.storage.setSession({
-      ...(previous || { schemaVersion: 1, deviceUuid: installation.id, deviceName: installation.name }),
-      status: 'activating',
+      ...(previous || {
+        schemaVersion: 1,
+        deviceUuid: installation.id,
+        deviceName: installation.name,
+      }),
+      status: "activating",
       deviceUuid: installation.id,
       deviceName: installation.name,
       errorCode: undefined,
     });
 
     try {
-      const payload = await this.api.request<Payload>('/licenses/activate', {
-        method: 'POST', authenticated: false, retryAfterRefresh: false,
-        body: { license_key: rawKey, ...this.devices.activationPayload(installation) },
+      const payload = await this.api.request<Payload>("/licenses/activate", {
+        method: "POST",
+        authenticated: false,
+        retryAfterRefresh: false,
+        body: {
+          license_key: rawKey,
+          ...this.devices.activationPayload(installation),
+        },
       });
       const tokens = parseTokenSet(payload);
       const entitlements = this.entitlements.fromPayload(payload);
       const now = Date.now();
       const deviceRegistration = registration(payload, installation.name);
       const activated: AuthSession = {
-        schemaVersion: 1, status: statusFromEntitlements(entitlements), deviceUuid: installation.id,
-        deviceName: deviceRegistration.deviceName, registration: deviceRegistration,
-        tokens, entitlements, lastValidatedAt: now,
-        offlineGraceUntil: this.entitlements.offlineGraceUntil(entitlements, now),
+        schemaVersion: 1,
+        status: statusFromEntitlements(entitlements),
+        deviceUuid: installation.id,
+        deviceName: deviceRegistration.deviceName,
+        registration: deviceRegistration,
+        tokens,
+        entitlements,
+        lastValidatedAt: now,
+        offlineGraceUntil: this.entitlements.offlineGraceUntil(
+          entitlements,
+          now,
+        ),
       };
       return this.storage.setSession(activated);
     } catch (error) {
@@ -100,31 +146,62 @@ export class AuthService {
   async validate(force = false): Promise<AuthSession | null> {
     const existing = await this.session();
     if (!existing?.tokens) return existing;
-    if (!force && existing.lastValidatedAt && Date.now() - existing.lastValidatedAt < 12 * 60 * 60 * 1000) return existing;
+    if (
+      !force &&
+      existing.lastValidatedAt &&
+      Date.now() - existing.lastValidatedAt < 12 * 60 * 60 * 1000
+    )
+      return existing;
     try {
-      const payload = await this.api.request<Payload>('/license', { method: 'GET' });
+      const payload = await this.api.request<Payload>("/license", {
+        method: "GET",
+      });
       const entitlements = this.entitlements.fromPayload(payload);
       const now = Date.now();
       return this.storage.setSession({
-        ...(await this.storage.getSession() || existing), status: statusFromEntitlements(entitlements), entitlements,
-        lastValidatedAt: now, offlineGraceUntil: this.entitlements.offlineGraceUntil(entitlements, now),
+        ...((await this.storage.getSession()) || existing),
+        status: statusFromEntitlements(entitlements),
+        entitlements,
+        lastValidatedAt: now,
+        offlineGraceUntil: this.entitlements.offlineGraceUntil(
+          entitlements,
+          now,
+        ),
         errorCode: undefined,
       });
     } catch (unknownError) {
-      const error = unknownError instanceof ApiError ? unknownError : new ApiError('License validation failed.', 'REQUEST_FAILED', 0);
-      const current = await this.storage.getSession() || existing;
-      if (error.isTemporary && this.entitlements.isOfflineGraceAvailable(current)) {
-        return this.storage.setSession({ ...current, status: 'offline_grace', errorCode: error.code });
+      const error =
+        unknownError instanceof ApiError
+          ? unknownError
+          : new ApiError("License validation failed.", "REQUEST_FAILED", 0);
+      const current = (await this.storage.getSession()) || existing;
+      if (
+        error.isTemporary &&
+        this.entitlements.isOfflineGraceAvailable(current)
+      ) {
+        return this.storage.setSession({
+          ...current,
+          status: "offline_grace",
+          errorCode: error.code,
+        });
       }
       if (error.isTemporary) {
-        await this.storage.setSession({ ...current, status: 'offline_locked', errorCode: error.code });
+        await this.storage.setSession({
+          ...current,
+          status: "offline_locked",
+          errorCode: error.code,
+        });
       }
       if (!error.isTemporary) {
         await this.storage.setSession({
           ...current,
           status: statusForError(error),
           tokens: error.clearsCredentials ? undefined : current.tokens,
-          entitlements: ['LICENSE_EXPIRED', 'SUBSCRIPTION_INACTIVE', 'SUBSCRIPTION_EXPIRED'].includes(error.code)
+          entitlements: [
+            "LICENSE_EXPIRED",
+            "SUBSCRIPTION_INACTIVE",
+            "SUBSCRIPTION_EXPIRED",
+          ].includes(error.code)
             ? current.entitlements && { ...current.entitlements, features: [] }
             : current.entitlements,
           errorCode: error.code,
@@ -138,7 +215,7 @@ export class AuthService {
     const session = await this.storage.getSession();
     if (!session) return;
     try {
-      await this.api.request('/auth/logout', { method: 'POST' });
+      await this.api.request("/auth/logout", { method: "POST" });
     } catch (error) {
       if (!(error instanceof ApiError) || error.isTemporary) throw error;
     }

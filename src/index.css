@@ -49,15 +49,44 @@
     --ring: 35 92% 54%;
   }
 
-  * { @apply border-border; }
-  html, body, #root { margin: 0; min-width: 760px; min-height: 590px; }
-  body { @apply bg-background font-sans text-foreground antialiased; }
-  button, textarea, input { font: inherit; }
-  ::selection { background: hsl(var(--primary) / .28); }
-  ::-webkit-scrollbar { width: 9px; height: 9px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: hsl(var(--muted-foreground) / .35); background-clip: padding-box; }
-  ::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground) / .55); background-clip: padding-box; }
+  * {
+    @apply border-border;
+  }
+  html,
+  body,
+  #root {
+    margin: 0;
+    min-width: 760px;
+    min-height: 590px;
+  }
+  body {
+    @apply bg-background font-sans text-foreground antialiased;
+  }
+  button,
+  textarea,
+  input {
+    font: inherit;
+  }
+  ::selection {
+    background: hsl(var(--primary) / 0.28);
+  }
+  ::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background: hsl(var(--muted-foreground) / 0.35);
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.55);
+    background-clip: padding-box;
+  }
 }
 
 @layer components {
@@ -75,7 +104,7 @@
 }
 
 .sortable-ghost {
-  opacity: .35;
+  opacity: 0.35;
 }
 
 .sortable-chosen {
@@ -83,7 +112,12 @@
 }
 
 .loading-glow {
-  background: radial-gradient(circle, hsl(var(--primary) / .11) 0%, hsl(var(--primary) / .035) 42%, transparent 72%);
+  background: radial-gradient(
+    circle,
+    hsl(var(--primary) / 0.11) 0%,
+    hsl(var(--primary) / 0.035) 42%,
+    transparent 72%
+  );
   filter: blur(8px);
 }
 
@@ -93,9 +127,15 @@
 }
 
 @keyframes loading-progress {
-  0% { transform: translateX(-115%); }
-  55% { transform: translateX(110%); }
-  100% { transform: translateX(215%); }
+  0% {
+    transform: translateX(-115%);
+  }
+  55% {
+    transform: translateX(110%);
+  }
+  100% {
+    transform: translateX(215%);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -112,7 +152,7 @@
   background: hsl(var(--popover));
   color: hsl(var(--popover-foreground));
   font-family: Montserrat, sans-serif;
-  box-shadow: 0 18px 48px rgb(0 0 0 / .35);
+  box-shadow: 0 18px 48px rgb(0 0 0 / 0.35);
 }
 
 .driver-popover.text-saver-tour .driver-popover-title {

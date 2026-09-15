@@ -1,4 +1,4 @@
-import { createContext, useContext, type RefObject } from 'react';
+import { createContext, useContext, type RefObject } from "react";
 import type {
   License,
   LicenseDevice,
@@ -9,8 +9,8 @@ import type {
   SyncSettings,
   TabContextPosition,
   TextMatch,
-} from '@/types';
-import type { PromptResult } from '@/hooks/use-prompt';
+} from "@/types";
+import type { PromptResult } from "@/hooks/use-prompt";
 
 export type TextSaverContextValue = {
   state: SaverState | null;
@@ -43,8 +43,8 @@ export type TextSaverContextValue = {
     devicesOpen: boolean;
   };
   ui: {
-    theme: 'dark' | 'light';
-    saveStatus: 'idle' | 'saving' | 'error';
+    theme: "dark" | "light";
+    saveStatus: "idle" | "saving" | "error";
     contextMenu: TabContextPosition | null;
     promptConfig: PromptConfig | null;
     toast: string;
@@ -91,10 +91,13 @@ export type TextSaverContextValue = {
   };
 };
 
-export const TextSaverContext = createContext<TextSaverContextValue | null>(null);
+export const TextSaverContext = createContext<TextSaverContextValue | null>(
+  null,
+);
 
 export function useTextSaver() {
   const value = useContext(TextSaverContext);
-  if (!value) throw new Error('useTextSaver must be used inside TextSaverProvider.');
+  if (!value)
+    throw new Error("useTextSaver must be used inside TextSaverProvider.");
   return value;
 }

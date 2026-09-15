@@ -1,7 +1,7 @@
 export type PlainTab = {
   id: string;
   name: string;
-  kind: 'normal' | 'inbox';
+  kind: "normal" | "inbox";
   protected: false;
   text: string;
 };
@@ -9,7 +9,7 @@ export type PlainTab = {
 export type EncryptedTab = {
   id: string;
   name: string;
-  kind: 'normal';
+  kind: "normal";
   protected: true;
   salt: string;
   iv: string;
@@ -30,8 +30,8 @@ export type License = {
   deviceName: string;
   product?: string;
   plan?: string;
-  billingType?: 'subscription' | 'lifetime';
-  licenseStatus?: 'active' | 'expired' | 'revoked';
+  billingType?: "subscription" | "lifetime";
+  licenseStatus?: "active" | "expired" | "revoked";
   expiresAt?: string | null;
   maxDevices?: number;
   activeDevices?: number;
@@ -42,19 +42,19 @@ export type License = {
     lastSeenAt: string;
   };
   features?: string[];
-  planId: 'free' | 'plus';
+  planId: "free" | "plus";
   status:
-    | 'inactive'
-    | 'activating'
-    | 'active'
-    | 'refreshing'
-    | 'offline_grace'
-    | 'offline_locked'
-    | 'expired'
-    | 'revoked'
-    | 'device_revoked'
-    | 'subscription_inactive'
-    | 'subscription_expired';
+    | "inactive"
+    | "activating"
+    | "active"
+    | "refreshing"
+    | "offline_grace"
+    | "offline_locked"
+    | "expired"
+    | "revoked"
+    | "device_revoked"
+    | "subscription_inactive"
+    | "subscription_expired";
   lastValidatedAt?: number;
   offlineValidUntil?: number;
   validationError?: string;
@@ -89,7 +89,7 @@ export type TabContextPosition = {
 };
 
 export type Plan = {
-  id: 'free' | 'plus';
+  id: "free" | "plus";
   name: string;
   price: number;
   maxTabs: number;
@@ -132,5 +132,8 @@ export type PromptConfig = {
   inputTwo?: PromptInput;
   options?: PromptOption[];
   preview?: PromptPreview[];
-  validate?: (first: string, second: string) => string | null | Promise<string | null>;
+  validate?: (
+    first: string,
+    second: string,
+  ) => string | null | Promise<string | null>;
 };

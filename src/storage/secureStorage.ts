@@ -1,7 +1,7 @@
-import type { AuthSession } from '../auth/types.ts';
+import type { AuthSession } from "../auth/types.ts";
 
-export const AUTH_SESSION_KEY = 'text_saver_device_auth_v1';
-export const LEGACY_LICENSE_KEY = 'text_saver_license';
+export const AUTH_SESSION_KEY = "text_saver_device_auth_v1";
+export const LEGACY_LICENSE_KEY = "text_saver_license";
 
 type StorageArea = {
   get(keys?: string | string[] | null): Promise<Record<string, unknown>>;
@@ -11,18 +11,20 @@ type StorageArea = {
 
 function localStorageArea(): StorageArea {
   if (!globalThis.chrome?.storage?.local) {
-    throw new Error('Chrome local storage is unavailable.');
+    throw new Error("Chrome local storage is unavailable.");
   }
   return chrome.storage.local as StorageArea;
 }
 
 function isSession(value: unknown): value is AuthSession {
-  if (!value || typeof value !== 'object') return false;
+  if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<AuthSession>;
-  return candidate.schemaVersion === 1
-    && typeof candidate.status === 'string'
-    && typeof candidate.deviceUuid === 'string'
-    && typeof candidate.deviceName === 'string';
+  return (
+    candidate.schemaVersion === 1 &&
+    typeof candidate.status === "string" &&
+    typeof candidate.deviceUuid === "string" &&
+    typeof candidate.deviceName === "string"
+  );
 }
 
 /**
@@ -42,7 +44,10 @@ export class SecureStorage {
   }
 
   async getSession(): Promise<AuthSession | null> {
-    const stored = await this.area().get([AUTH_SESSION_KEY, LEGACY_LICENSE_KEY]);
+    const stored = await this.area().get([
+      AUTH_SESSION_KEY,
+      LEGACY_LICENSE_KEY,
+    ]);
     const current = stored[AUTH_SESSION_KEY];
     if (isSession(current)) return structuredClone(current);
 

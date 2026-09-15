@@ -1,9 +1,9 @@
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { useTextSaver } from '@/context/TextSaverContext';
-import type { SaverTab } from '@/types';
-import { ArrowDown, ArrowUp, Copy, Lock, Unlock, X } from 'lucide-react';
-import type { KeyboardEvent, RefObject } from 'react';
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useTextSaver } from "@/context/TextSaverContext";
+import type { SaverTab } from "@/types";
+import { ArrowDown, ArrowUp, Copy, Lock, Unlock, X } from "lucide-react";
+import type { KeyboardEvent, RefObject } from "react";
 
 type Match = { start: number; end: number };
 
@@ -28,7 +28,9 @@ type Props = {
   onCloseFind: () => void;
 };
 
-function LockedTabOverlay(props: Pick<Props, 'activeTab' | 'onUnlock' | 'onResetProtected'>) {
+function LockedTabOverlay(
+  props: Pick<Props, "activeTab" | "onUnlock" | "onResetProtected">,
+) {
   return (
     <div className="absolute inset-0 z-10 grid place-items-center bg-card">
       <div className="text-center">
@@ -41,7 +43,11 @@ function LockedTabOverlay(props: Pick<Props, 'activeTab' | 'onUnlock' | 'onReset
             <Unlock />
             Unlock
           </Button>
-          <Button size="sm" variant="outline" onClick={() => props.onResetProtected(props.activeTab.id)}>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => props.onResetProtected(props.activeTab.id)}
+          >
             Forgot password
           </Button>
         </div>
@@ -50,13 +56,15 @@ function LockedTabOverlay(props: Pick<Props, 'activeTab' | 'onUnlock' | 'onReset
   );
 }
 
-function LineGutter(props: Pick<Props, 'gutterRef' | 'editorText' | 'lineHeights' | 'onCopyLine'>) {
+function LineGutter(
+  props: Pick<Props, "gutterRef" | "editorText" | "lineHeights" | "onCopyLine">,
+) {
   return (
     <div
       ref={props.gutterRef}
       className="line-gutter w-12 shrink-0 overflow-hidden border-r border-border bg-muted/25 py-2.5 text-right font-mono text-[12px] leading-5 text-muted-foreground/60"
     >
-      {props.editorText.split('\n').map((line, index) => (
+      {props.editorText.split("\n").map((line, index) => (
         <LineNumberItem
           key={index}
           line={line}
@@ -94,14 +102,22 @@ function LineNumberItem({
 }
 
 function FindPanel(
-  props: Pick<Props, 'findQuery' | 'findIndex' | 'matches' | 'onFindQueryChange' | 'onNavigateFind' | 'onCloseFind'>,
+  props: Pick<
+    Props,
+    | "findQuery"
+    | "findIndex"
+    | "matches"
+    | "onFindQueryChange"
+    | "onNavigateFind"
+    | "onCloseFind"
+  >,
 ) {
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    if (event.key === 'Enter') {
+    if (event.key === "Enter") {
       event.preventDefault();
       props.onNavigateFind(event.shiftKey ? -1 : 1);
     }
-    if (event.key === 'Escape') props.onCloseFind();
+    if (event.key === "Escape") props.onCloseFind();
   }
 
   return (
@@ -116,7 +132,9 @@ function FindPanel(
         onKeyDown={handleKeyDown}
       />
       <span className="min-w-10 text-center text-[11px] text-muted-foreground">
-        {props.matches.length ? `${Math.max(0, props.findIndex + 1)}/${props.matches.length}` : '0/0'}
+        {props.matches.length
+          ? `${Math.max(0, props.findIndex + 1)}/${props.matches.length}`
+          : "0/0"}
       </span>
       <Button
         size="icon"
@@ -136,7 +154,12 @@ function FindPanel(
       >
         <ArrowDown />
       </Button>
-      <Button size="icon" variant="ghost" className="size-8" onClick={props.onCloseFind}>
+      <Button
+        size="icon"
+        variant="ghost"
+        className="size-8"
+        onClick={props.onCloseFind}
+      >
         <X />
       </Button>
     </div>
@@ -146,11 +169,11 @@ function FindPanel(
 function EditorPanelView(props: Props) {
   function handleEditorKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (!props.findOpen) return;
-    if (event.key === 'Enter') {
+    if (event.key === "Enter") {
       event.preventDefault();
       props.onNavigateFind(event.shiftKey ? -1 : 1);
     }
-    if (event.key === 'Escape') {
+    if (event.key === "Escape") {
       event.preventDefault();
       props.onCloseFind();
     }
@@ -185,7 +208,8 @@ function EditorPanelView(props: Props) {
         className="min-w-0 flex-1 resize-none bg-card px-3.5 py-2.5 font-sans text-[14px] leading-5 text-foreground outline-none placeholder:text-muted-foreground/60 disabled:opacity-0"
         onChange={(event) => props.onEditorChange(event.target.value)}
         onScroll={(event) => {
-          if (props.gutterRef.current) props.gutterRef.current.scrollTop = event.currentTarget.scrollTop;
+          if (props.gutterRef.current)
+            props.gutterRef.current.scrollTop = event.currentTarget.scrollTop;
         }}
         onKeyDown={handleEditorKeyDown}
       />
@@ -221,7 +245,9 @@ export function EditorPanel() {
       matches={editor.matches}
       onUnlock={(tabId) => void actions.unlockTab(tabId)}
       onResetProtected={(tabId) => void actions.resetProtectedTab(tabId)}
-      onCopyLine={(line, index) => void actions.copyText(line, `Line ${index + 1} copied to clipboard`)}
+      onCopyLine={(line, index) =>
+        void actions.copyText(line, `Line ${index + 1} copied to clipboard`)
+      }
       onEditorChange={actions.changeEditorText}
       onFindQueryChange={actions.changeFindQuery}
       onNavigateFind={actions.navigateFind}

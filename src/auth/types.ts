@@ -1,22 +1,22 @@
 export type AuthStatus =
-  | 'inactive'
-  | 'activating'
-  | 'active'
-  | 'refreshing'
-  | 'offline_grace'
-  | 'offline_locked'
-  | 'expired'
-  | 'revoked'
-  | 'device_revoked'
-  | 'subscription_inactive'
-  | 'subscription_expired';
+  | "inactive"
+  | "activating"
+  | "active"
+  | "refreshing"
+  | "offline_grace"
+  | "offline_locked"
+  | "expired"
+  | "revoked"
+  | "device_revoked"
+  | "subscription_inactive"
+  | "subscription_expired";
 
 export type Entitlements = {
   product: string;
   plan: string;
   features: string[];
   licenseStatus?: string;
-  billingType?: 'subscription' | 'lifetime';
+  billingType?: "subscription" | "lifetime";
   expiresAt?: string | null;
   maxDevices?: number;
   activeDevices?: number;

@@ -10,18 +10,18 @@ import {
   isValidTab,
   isValidState,
   saveState,
-} from './storage.js';
-import { getPlanLimits } from './plans.js';
-import { ensureActiveLicense, licenseApiRequest } from './licensing.js';
+} from "./storage.js";
+import { getPlanLimits } from "./plans.js";
+import { ensureActiveLicense, licenseApiRequest } from "./licensing.js";
 
-export const SYNC_KEY = 'text_saver_cloud_sync';
-export const CLOUD_SYNC_ALARM = 'text-saver-cloud-sync';
+export const SYNC_KEY = "text_saver_cloud_sync";
+export const CLOUD_SYNC_ALARM = "text-saver-cloud-sync";
 export const CLOUD_SYNC_SAFETY_DELAY_MS = 60 * 1000;
 export const CLOUD_SYNC_RETRY_DELAY_MS = 5 * 60 * 1000;
-export const SYNC_DOCUMENT_FORMAT = 'text-saver-cloud-tabs';
+export const SYNC_DOCUMENT_FORMAT = "text-saver-cloud-tabs";
 export const SYNC_DOCUMENT_VERSION = 2;
-const LEGACY_SYNC_AAD = new TextEncoder().encode('text-saver-cloud:v1');
-const SYNC_AAD = new TextEncoder().encode('text-saver-cloud:v2');
+const LEGACY_SYNC_AAD = new TextEncoder().encode("text-saver-cloud:v1");
+const SYNC_AAD = new TextEncoder().encode("text-saver-cloud:v2");
 
 function same(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
@@ -32,41 +32,56 @@ function clone(value) {
 }
 
 function emptySyncDocument() {
-  return { format: SYNC_DOCUMENT_FORMAT, version: SYNC_DOCUMENT_VERSION, tabs: [] };
+  return {
+    format: SYNC_DOCUMENT_FORMAT,
+    version: SYNC_DOCUMENT_VERSION,
+    tabs: [],
+  };
 }
 
 function uniqueIds(ids) {
-  return [...new Set(Array.isArray(ids) ? ids.filter((id) => typeof id === 'string') : [])];
+  return [
+    ...new Set(
+      Array.isArray(ids) ? ids.filter((id) => typeof id === "string") : [],
+    ),
+  ];
 }
 
 export function isValidSyncDocument(value) {
-  return value
-    && value.format === SYNC_DOCUMENT_FORMAT
-    && value.version === SYNC_DOCUMENT_VERSION
-    && Array.isArray(value.tabs)
-    && value.tabs.length <= getPlanLimits('plus').maxSyncedTabs
-    && value.tabs.every((tab) => isValidTab(tab) && !isInbox(tab))
-    && new Set(value.tabs.map((tab) => tab.id)).size === value.tabs.length;
+  return (
+    value &&
+    value.format === SYNC_DOCUMENT_FORMAT &&
+    value.version === SYNC_DOCUMENT_VERSION &&
+    Array.isArray(value.tabs) &&
+    value.tabs.length <= getPlanLimits("plus").maxSyncedTabs &&
+    value.tabs.every((tab) => isValidTab(tab) && !isInbox(tab)) &&
+    new Set(value.tabs.map((tab) => tab.id)).size === value.tabs.length
+  );
 }
 
 export function createSyncDocument(state, selectedTabIds = []) {
-  const maxSyncedTabs = getPlanLimits('plus').maxSyncedTabs;
+  const maxSyncedTabs = getPlanLimits("plus").maxSyncedTabs;
   const ids = uniqueIds(selectedTabIds);
   if (ids.length > maxSyncedTabs) {
     throw new Error(`Plus supports up to ${maxSyncedTabs} synced tabs.`);
   }
-  const byId = new Map(state.tabs.filter((tab) => !isInbox(tab)).map((tab) => [tab.id, tab]));
+  const byId = new Map(
+    state.tabs.filter((tab) => !isInbox(tab)).map((tab) => [tab.id, tab]),
+  );
   return {
     format: SYNC_DOCUMENT_FORMAT,
     version: SYNC_DOCUMENT_VERSION,
-    tabs: ids.map((id) => byId.get(id)).filter(Boolean).map(clone),
+    tabs: ids
+      .map((id) => byId.get(id))
+      .filter(Boolean)
+      .map(clone),
   };
 }
 
 function legacyStateToSyncDocument(state) {
   const selectedTabIds = state.tabs
     .filter((tab) => !isInbox(tab))
-    .slice(0, getPlanLimits('plus').maxSyncedTabs)
+    .slice(0, getPlanLimits("plus").maxSyncedTabs)
     .map((tab) => tab.id);
   return createSyncDocument(state, selectedTabIds);
 }
@@ -74,9 +89,10 @@ function legacyStateToSyncDocument(state) {
 function conflictCopy(tab) {
   const copy = clone(tab);
   copy.id = createId();
-  copy.kind = 'normal';
+  copy.kind = "normal";
   copy.name = `${tab.name} (sync conflict)`;
-  if (isEncryptedTab(copy)) copy.encryptionContextId = tab.encryptionContextId || tab.id;
+  if (isEncryptedTab(copy))
+    copy.encryptionContextId = tab.encryptionContextId || tab.id;
   return copy;
 }
 
@@ -95,20 +111,40 @@ function resolveEntry(base, local, remote, conflicts) {
 
 export function mergeStates(baseState, localState, remoteState) {
   if (!baseState) baseState = { tabs: [] };
-  const baseTabs = new Map(baseState.tabs.filter((tab) => !isInbox(tab)).map((tab) => [tab.id, tab]));
-  const localTabs = new Map(localState.tabs.filter((tab) => !isInbox(tab)).map((tab) => [tab.id, tab]));
-  const remoteTabs = new Map(remoteState.tabs.filter((tab) => !isInbox(tab)).map((tab) => [tab.id, tab]));
-  const ids = new Set([...baseTabs.keys(), ...localTabs.keys(), ...remoteTabs.keys()]);
+  const baseTabs = new Map(
+    baseState.tabs.filter((tab) => !isInbox(tab)).map((tab) => [tab.id, tab]),
+  );
+  const localTabs = new Map(
+    localState.tabs.filter((tab) => !isInbox(tab)).map((tab) => [tab.id, tab]),
+  );
+  const remoteTabs = new Map(
+    remoteState.tabs.filter((tab) => !isInbox(tab)).map((tab) => [tab.id, tab]),
+  );
+  const ids = new Set([
+    ...baseTabs.keys(),
+    ...localTabs.keys(),
+    ...remoteTabs.keys(),
+  ]);
   const resolved = new Map();
   const conflicts = [];
   ids.forEach((id) => {
-    const tab = resolveEntry(baseTabs.get(id), localTabs.get(id), remoteTabs.get(id), conflicts);
+    const tab = resolveEntry(
+      baseTabs.get(id),
+      localTabs.get(id),
+      remoteTabs.get(id),
+      conflicts,
+    );
     if (tab) resolved.set(id, tab);
   });
 
   const ordered = [];
   const append = (tab) => {
-    if (!tab || !resolved.has(tab.id) || ordered.some((item) => item.id === tab.id)) return;
+    if (
+      !tab ||
+      !resolved.has(tab.id) ||
+      ordered.some((item) => item.id === tab.id)
+    )
+      return;
     ordered.push(resolved.get(tab.id));
   };
   localState.tabs.forEach(append);
@@ -129,26 +165,43 @@ export function mergeStates(baseState, localState, remoteState) {
   return { version: localState.version, tabs: ordered, activeTabId };
 }
 
-export function mergeSyncDocuments(baseDocument, localDocument, remoteDocument) {
+export function mergeSyncDocuments(
+  baseDocument,
+  localDocument,
+  remoteDocument,
+) {
   const base = baseDocument || emptySyncDocument();
   if (![base, localDocument, remoteDocument].every(isValidSyncDocument)) {
-    throw new Error('Cloud data has an unsupported format.');
+    throw new Error("Cloud data has an unsupported format.");
   }
 
   const baseTabs = new Map(base.tabs.map((tab) => [tab.id, tab]));
   const localTabs = new Map(localDocument.tabs.map((tab) => [tab.id, tab]));
   const remoteTabs = new Map(remoteDocument.tabs.map((tab) => [tab.id, tab]));
-  const ids = new Set([...baseTabs.keys(), ...localTabs.keys(), ...remoteTabs.keys()]);
+  const ids = new Set([
+    ...baseTabs.keys(),
+    ...localTabs.keys(),
+    ...remoteTabs.keys(),
+  ]);
   const resolved = new Map();
   const conflicts = [];
   ids.forEach((id) => {
-    const tab = resolveEntry(baseTabs.get(id), localTabs.get(id), remoteTabs.get(id), conflicts);
+    const tab = resolveEntry(
+      baseTabs.get(id),
+      localTabs.get(id),
+      remoteTabs.get(id),
+      conflicts,
+    );
     if (tab) resolved.set(id, tab);
   });
 
   const ordered = [];
   const append = (tab) => {
-    if (tab && resolved.has(tab.id) && !ordered.some((item) => item.id === tab.id)) {
+    if (
+      tab &&
+      resolved.has(tab.id) &&
+      !ordered.some((item) => item.id === tab.id)
+    ) {
       ordered.push(resolved.get(tab.id));
     }
   };
@@ -156,20 +209,26 @@ export function mergeSyncDocuments(baseDocument, localDocument, remoteDocument) 
   localDocument.tabs.forEach(append);
   resolved.forEach(append);
 
-  const maxSyncedTabs = getPlanLimits('plus').maxSyncedTabs;
+  const maxSyncedTabs = getPlanLimits("plus").maxSyncedTabs;
   if (ordered.length > maxSyncedTabs) {
-    throw new Error(`Cloud sync has more than ${maxSyncedTabs} selected tabs. Deselect a tab on another device first.`);
+    throw new Error(
+      `Cloud sync has more than ${maxSyncedTabs} selected tabs. Deselect a tab on another device first.`,
+    );
   }
 
   return {
-    document: { format: SYNC_DOCUMENT_FORMAT, version: SYNC_DOCUMENT_VERSION, tabs: ordered },
+    document: {
+      format: SYNC_DOCUMENT_FORMAT,
+      version: SYNC_DOCUMENT_VERSION,
+      tabs: ordered,
+    },
     conflicts,
   };
 }
 
 export function applySyncDocument(localState, document, conflicts = []) {
   if (!isValidState(localState) || !isValidSyncDocument(document)) {
-    throw new Error('Cannot apply invalid cloud data.');
+    throw new Error("Cannot apply invalid cloud data.");
   }
   const next = clone(localState);
   const inboxIndex = () => next.tabs.findIndex(isInbox);
@@ -180,14 +239,19 @@ export function applySyncDocument(localState, document, conflicts = []) {
   });
   conflicts.forEach((tab) => next.tabs.splice(inboxIndex(), 0, clone(tab)));
   if (!next.tabs.some((tab) => tab.id === next.activeTabId)) {
-    next.activeTabId = next.tabs.find((tab) => !isInbox(tab))?.id || next.tabs[0].id;
+    next.activeTabId =
+      next.tabs.find((tab) => !isInbox(tab))?.id || next.tabs[0].id;
   }
-  if (!isValidState(next)) throw new Error('Synced tabs exceed the local safety limit.');
+  if (!isValidState(next))
+    throw new Error("Synced tabs exceed the local safety limit.");
   return next;
 }
 
 async function transformStream(bytes, type) {
-  const stream = type === 'compress' ? new CompressionStream('gzip') : new DecompressionStream('gzip');
+  const stream =
+    type === "compress"
+      ? new CompressionStream("gzip")
+      : new DecompressionStream("gzip");
   const writer = stream.writable.getWriter();
   writer.write(bytes);
   writer.close();
@@ -195,45 +259,64 @@ async function transformStream(bytes, type) {
 }
 
 async function importSyncKey(keyBytes) {
-  return crypto.subtle.importKey('raw', keyBytes, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+  return crypto.subtle.importKey("raw", keyBytes, { name: "AES-GCM" }, false, [
+    "encrypt",
+    "decrypt",
+  ]);
 }
 
 async function encryptDocument(document, keyBytes) {
-  const compressed = await transformStream(new TextEncoder().encode(JSON.stringify(document)), 'compress');
+  const compressed = await transformStream(
+    new TextEncoder().encode(JSON.stringify(document)),
+    "compress",
+  );
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ciphertext = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv, additionalData: SYNC_AAD, tagLength: 128 },
+    { name: "AES-GCM", iv, additionalData: SYNC_AAD, tagLength: 128 },
     await importSyncKey(keyBytes),
     compressed,
   );
   return { ciphertext, iv };
 }
 
-async function decryptPayload(ciphertext, keyBytes, iv, format = '1') {
+async function decryptPayload(ciphertext, keyBytes, iv, format = "1") {
   const currentFirst = format === String(SYNC_DOCUMENT_VERSION);
   const attempts = currentFirst
-    ? [{ legacy: false, aad: SYNC_AAD }, { legacy: true, aad: LEGACY_SYNC_AAD }]
-    : [{ legacy: true, aad: LEGACY_SYNC_AAD }, { legacy: false, aad: SYNC_AAD }];
+    ? [
+        { legacy: false, aad: SYNC_AAD },
+        { legacy: true, aad: LEGACY_SYNC_AAD },
+      ]
+    : [
+        { legacy: true, aad: LEGACY_SYNC_AAD },
+        { legacy: false, aad: SYNC_AAD },
+      ];
   const key = await importSyncKey(keyBytes);
   for (const attempt of attempts) {
     try {
       const compressed = await crypto.subtle.decrypt(
-        { name: 'AES-GCM', iv, additionalData: attempt.aad, tagLength: 128 },
+        { name: "AES-GCM", iv, additionalData: attempt.aad, tagLength: 128 },
         key,
         ciphertext,
       );
-      const plaintext = await transformStream(new Uint8Array(compressed), 'decompress');
+      const plaintext = await transformStream(
+        new Uint8Array(compressed),
+        "decompress",
+      );
       const value = JSON.parse(new TextDecoder().decode(plaintext));
-      if (!attempt.legacy && isValidSyncDocument(value)) return { document: value, legacyState: null };
+      if (!attempt.legacy && isValidSyncDocument(value))
+        return { document: value, legacyState: null };
       if (attempt.legacy && isValidState(value)) {
-        return { document: legacyStateToSyncDocument(value), legacyState: value };
+        return {
+          document: legacyStateToSyncDocument(value),
+          legacyState: value,
+        };
       }
     } catch (_error) {
       // Try the other authenticated format so older backends do not need to echo
       // X-Sync-Format before clients can migrate their encrypted cloud record.
     }
   }
-  throw new Error('Cloud data has an unsupported format.');
+  throw new Error("Cloud data has an unsupported format.");
 }
 
 export async function getSyncSettings() {
@@ -251,38 +334,39 @@ function decodeCloudEnvelope(data) {
   try {
     envelope = JSON.parse(data);
   } catch (_error) {
-    throw new Error('Cloud data has an unsupported format.');
+    throw new Error("Cloud data has an unsupported format.");
   }
   if (
-    !envelope
-    || typeof envelope.ciphertext !== 'string'
-    || typeof envelope.salt !== 'string'
-    || typeof envelope.iv !== 'string'
+    !envelope ||
+    typeof envelope.ciphertext !== "string" ||
+    typeof envelope.salt !== "string" ||
+    typeof envelope.iv !== "string"
   ) {
-    throw new Error('Cloud data has an unsupported format.');
+    throw new Error("Cloud data has an unsupported format.");
   }
   return {
     ciphertext: base64ToBytes(envelope.ciphertext),
     salt: envelope.salt,
     iv: envelope.iv,
-    format: String(envelope.format || '1'),
+    format: String(envelope.format || "1"),
   };
 }
 
 async function fetchCloud(license) {
-  const payload = await licenseApiRequest('/sync/pull', license);
+  const payload = await licenseApiRequest("/sync/pull", license);
   const cloud = {
     revision: Number(payload.revision) || 0,
     data: payload.data,
-    maxBytes: Number(payload.max_bytes) || getPlanLimits('plus').maxCloudBytes,
+    maxBytes: Number(payload.max_bytes) || getPlanLimits("plus").maxCloudBytes,
   };
-  return typeof payload.data === 'string'
+  return typeof payload.data === "string"
     ? { ...cloud, ...decodeCloudEnvelope(payload.data) }
     : cloud;
 }
 
 async function putCloud(license, document, settings, revision = 0, maxBytes) {
-  if (!isValidSyncDocument(document)) throw new Error('Refusing to upload invalid cloud data.');
+  if (!isValidSyncDocument(document))
+    throw new Error("Refusing to upload invalid cloud data.");
   const keyBytes = base64ToBytes(settings.key);
   const encrypted = await encryptDocument(document, keyBytes);
   const data = JSON.stringify({
@@ -291,11 +375,14 @@ async function putCloud(license, document, settings, revision = 0, maxBytes) {
     iv: bytesToBase64(encrypted.iv),
     ciphertext: bytesToBase64(new Uint8Array(encrypted.ciphertext)),
   });
-  const limit = Number(maxBytes) || getPlanLimits('plus').maxCloudBytes;
+  const limit = Number(maxBytes) || getPlanLimits("plus").maxCloudBytes;
   if (new TextEncoder().encode(data).byteLength > limit) {
-    throw new Error('Selected tabs exceed the Plus cloud storage limit.');
+    throw new Error("Selected tabs exceed the Plus cloud storage limit.");
   }
-  const payload = await licenseApiRequest('/sync/push', license, { revision, data });
+  const payload = await licenseApiRequest("/sync/push", license, {
+    revision,
+    data,
+  });
   return {
     revision: Number(payload.revision),
     maxBytes: Number(payload.max_bytes) || limit,
@@ -305,14 +392,23 @@ async function putCloud(license, document, settings, revision = 0, maxBytes) {
 export async function enableCloudSync(password, initialTabIds = []) {
   const license = await ensureActiveLicense();
   const remote = await fetchCloud(license);
-  const salt = remote?.salt ? base64ToBytes(remote.salt) : crypto.getRandomValues(new Uint8Array(16));
+  const salt = remote?.salt
+    ? base64ToBytes(remote.salt)
+    : crypto.getRandomValues(new Uint8Array(16));
   const keyBytes = await deriveKeyBytes(password, salt);
   let decodedRemote;
   if (remote?.data) {
     try {
-      decodedRemote = await decryptPayload(remote.ciphertext, keyBytes, base64ToBytes(remote.iv), remote.format);
+      decodedRemote = await decryptPayload(
+        remote.ciphertext,
+        keyBytes,
+        base64ToBytes(remote.iv),
+        remote.format,
+      );
     } catch (_error) {
-      throw new Error('The sync password is incorrect. Cloud data was not changed.');
+      throw new Error(
+        "The sync password is incorrect. Cloud data was not changed.",
+      );
     }
   }
   const localState = await getOrMigrateState();
@@ -325,8 +421,18 @@ export async function enableCloudSync(password, initialTabIds = []) {
     document = decodedRemote.document;
     mergedState = applySyncDocument(localState, document);
   }
-  const settings = { enabled: true, key: bytesToBase64(keyBytes), salt: bytesToBase64(salt) };
-  const pushed = await putCloud(license, document, settings, remote.revision, remote.maxBytes);
+  const settings = {
+    enabled: true,
+    key: bytesToBase64(keyBytes),
+    salt: bytesToBase64(salt),
+  };
+  const pushed = await putCloud(
+    license,
+    document,
+    settings,
+    remote.revision,
+    remote.maxBytes,
+  );
   await saveState(mergedState);
   await saveSyncSettings({
     ...settings,
@@ -335,7 +441,7 @@ export async function enableCloudSync(password, initialTabIds = []) {
     revision: pushed.revision,
     maxBytes: pushed.maxBytes,
     lastSyncedAt: Date.now(),
-    status: 'synced',
+    status: "synced",
   });
   return mergedState;
 }
@@ -346,7 +452,10 @@ export async function syncNow({ retry = true } = {}) {
   const license = await ensureActiveLicense();
   const localState = await getOrMigrateState();
   const remote = await fetchCloud(license);
-  const localDocument = createSyncDocument(localState, settings.selectedTabIds || []);
+  const localDocument = createSyncDocument(
+    localState,
+    settings.selectedTabIds || [],
+  );
   let mergedState = localState;
   let mergedDocument = localDocument;
   let conflicts = [];
@@ -360,24 +469,44 @@ export async function syncNow({ retry = true } = {}) {
         remote.format,
       );
     } catch (_error) {
-      await saveSyncSettings({ ...settings, status: 'password-required', error: 'Cloud data cannot be decrypted.' });
-      throw new Error('Cloud data cannot be decrypted with this installation’s sync password.');
+      await saveSyncSettings({
+        ...settings,
+        status: "password-required",
+        error: "Cloud data cannot be decrypted.",
+      });
+      throw new Error(
+        "Cloud data cannot be decrypted with this installation’s sync password.",
+      );
     }
     if (decoded.legacyState) {
-      mergedState = mergeStates(settings.baseState, localState, decoded.legacyState);
+      mergedState = mergeStates(
+        settings.baseState,
+        localState,
+        decoded.legacyState,
+      );
       mergedDocument = legacyStateToSyncDocument(mergedState);
     } else {
       const baseDocument = isValidSyncDocument(settings.baseDocument)
         ? settings.baseDocument
         : emptySyncDocument();
-      const result = mergeSyncDocuments(baseDocument, localDocument, decoded.document);
+      const result = mergeSyncDocuments(
+        baseDocument,
+        localDocument,
+        decoded.document,
+      );
       mergedDocument = result.document;
       conflicts = result.conflicts;
       mergedState = applySyncDocument(localState, mergedDocument, conflicts);
     }
   }
   try {
-    const pushed = await putCloud(license, mergedDocument, settings, remote.revision, remote.maxBytes);
+    const pushed = await putCloud(
+      license,
+      mergedDocument,
+      settings,
+      remote.revision,
+      remote.maxBytes,
+    );
     const latestState = await getOrMigrateState();
     if (!same(localState, latestState)) {
       mergedState = mergeStates(localState, latestState, mergedState);
@@ -391,13 +520,18 @@ export async function syncNow({ retry = true } = {}) {
       revision: pushed.revision,
       maxBytes: pushed.maxBytes,
       lastSyncedAt: Date.now(),
-      status: 'synced',
+      status: "synced",
       error: undefined,
     });
     return mergedState;
   } catch (error) {
-    if (retry && error.code === 'SYNC_CONFLICT') return syncNow({ retry: false });
-    await saveSyncSettings({ ...settings, status: 'error', error: error.message });
+    if (retry && error.code === "SYNC_CONFLICT")
+      return syncNow({ retry: false });
+    await saveSyncSettings({
+      ...settings,
+      status: "error",
+      error: error.message,
+    });
     throw error;
   }
 }
@@ -407,11 +541,24 @@ export async function resetCloudSync(password) {
   const license = await ensureActiveLicense();
   const remote = await fetchCloud(license);
   const localState = await getOrMigrateState();
-  const document = createSyncDocument(localState, previous?.selectedTabIds || []);
+  const document = createSyncDocument(
+    localState,
+    previous?.selectedTabIds || [],
+  );
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const keyBytes = await deriveKeyBytes(password, salt);
-  const settings = { enabled: true, key: bytesToBase64(keyBytes), salt: bytesToBase64(salt) };
-  const pushed = await putCloud(license, document, settings, remote.revision, remote.maxBytes);
+  const settings = {
+    enabled: true,
+    key: bytesToBase64(keyBytes),
+    salt: bytesToBase64(salt),
+  };
+  const pushed = await putCloud(
+    license,
+    document,
+    settings,
+    remote.revision,
+    remote.maxBytes,
+  );
   await saveSyncSettings({
     ...settings,
     selectedTabIds: document.tabs.map((tab) => tab.id),
@@ -419,18 +566,25 @@ export async function resetCloudSync(password) {
     revision: pushed.revision,
     maxBytes: pushed.maxBytes,
     lastSyncedAt: Date.now(),
-    status: 'synced',
+    status: "synced",
   });
   return localState;
 }
 
 export async function setSyncedTabIds(tabIds) {
   const settings = await getSyncSettings();
-  if (!settings?.enabled || !settings.key) throw new Error('Set up cloud sync first.');
+  if (!settings?.enabled || !settings.key)
+    throw new Error("Set up cloud sync first.");
   const ids = uniqueIds(tabIds);
-  const maxSyncedTabs = getPlanLimits('plus').maxSyncedTabs;
-  if (ids.length > maxSyncedTabs) throw new Error(`Plus supports up to ${maxSyncedTabs} synced tabs.`);
-  await saveSyncSettings({ ...settings, selectedTabIds: ids, status: 'syncing', error: undefined });
+  const maxSyncedTabs = getPlanLimits("plus").maxSyncedTabs;
+  if (ids.length > maxSyncedTabs)
+    throw new Error(`Plus supports up to ${maxSyncedTabs} synced tabs.`);
+  await saveSyncSettings({
+    ...settings,
+    selectedTabIds: ids,
+    status: "syncing",
+    error: undefined,
+  });
   return syncNow();
 }
 
@@ -441,16 +595,21 @@ export async function disableCloudSync() {
 export async function scheduleCloudSync(delayMs = CLOUD_SYNC_SAFETY_DELAY_MS) {
   const settings = await getSyncSettings();
   if (!settings?.enabled) return;
-  await chrome.alarms.create(CLOUD_SYNC_ALARM, { when: Date.now() + Math.max(0, delayMs) });
+  await chrome.alarms.create(CLOUD_SYNC_ALARM, {
+    when: Date.now() + Math.max(0, delayMs),
+  });
 }
 
-export async function deferCloudSync(message, delayMs = CLOUD_SYNC_RETRY_DELAY_MS) {
+export async function deferCloudSync(
+  message,
+  delayMs = CLOUD_SYNC_RETRY_DELAY_MS,
+) {
   const settings = await getSyncSettings();
   if (!settings?.enabled) return;
   await saveSyncSettings({
     ...settings,
-    status: 'pending',
-    error: message || 'Changes are saved locally and waiting to sync.',
+    status: "pending",
+    error: message || "Changes are saved locally and waiting to sync.",
   });
   await scheduleCloudSync(delayMs);
 }

@@ -1,6 +1,6 @@
-import { Button } from '@/components/ui/button';
-import { useTextSaver } from '@/context/TextSaverContext';
-import { CloudUpload, Copy, Download } from 'lucide-react';
+import { Button } from "@/components/ui/button";
+import { useTextSaver } from "@/context/TextSaverContext";
+import { CloudUpload, Copy, Download } from "lucide-react";
 
 type Props = {
   stats: { words: number; characters: number; lines: number };
@@ -12,7 +12,15 @@ type Props = {
   onCopy: () => void;
 };
 
-function EditorFooterView({ stats, locked, syncEnabled, syncBusy, onSync, onDownload, onCopy }: Props) {
+function EditorFooterView({
+  stats,
+  locked,
+  syncEnabled,
+  syncBusy,
+  onSync,
+  onDownload,
+  onCopy,
+}: Props) {
   return (
     <footer
       className="mt-2 flex items-center justify-between rounded-lg border border-border bg-muted/30 px-3 py-2"
@@ -27,18 +35,29 @@ function EditorFooterView({ stats, locked, syncEnabled, syncBusy, onSync, onDown
       </div>
       <div className="flex gap-2">
         {syncEnabled && (
-          <Button size="sm" className="text-blue-400" variant="outline" disabled={syncBusy} onClick={onSync}>
+          <Button
+            size="sm"
+            className="text-blue-400"
+            variant="outline"
+            disabled={syncBusy}
+            onClick={onSync}
+          >
             <CloudUpload />
-            {syncBusy ? 'Syncing...' : 'Sync to Cloud'}
+            {syncBusy ? "Syncing..." : "Sync to Cloud"}
           </Button>
         )}
-        <Button size="sm" variant="outline" disabled={locked} onClick={onDownload}>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={locked}
+          onClick={onDownload}
+        >
           <Download />
-          {!syncEnabled && 'Download'}
+          {!syncEnabled && "Download"}
         </Button>
         <Button size="sm" variant="outline" disabled={locked} onClick={onCopy}>
           <Copy />
-          {!syncEnabled && 'Copy Text'}
+          {!syncEnabled && "Copy Text"}
         </Button>
       </div>
     </footer>
@@ -55,7 +74,7 @@ export function EditorFooter() {
       syncBusy={plan.busy}
       onSync={() => void actions.syncNow()}
       onDownload={() => void actions.downloadText()}
-      onCopy={() => void actions.copyText(editor.text, 'Copied to clipboard')}
+      onCopy={() => void actions.copyText(editor.text, "Copied to clipboard")}
     />
   );
 }

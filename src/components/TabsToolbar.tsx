@@ -1,11 +1,11 @@
-import { Button } from '@/components/ui/button';
-import { useTextSaver } from '@/context/TextSaverContext';
-import { isEncryptedTab, isInbox } from '@/lib/app-utils';
-import { cn } from '@/lib/utils';
-import type { SaverState, SaverTab } from '@/types';
-import { Cloud, Inbox, Lock, Plus, Unlock } from 'lucide-react';
-import type { MouseEvent } from 'react';
-import { ReactSortable } from 'react-sortablejs';
+import { Button } from "@/components/ui/button";
+import { useTextSaver } from "@/context/TextSaverContext";
+import { isEncryptedTab, isInbox } from "@/lib/app-utils";
+import { cn } from "@/lib/utils";
+import type { SaverState, SaverTab } from "@/types";
+import { Cloud, Inbox, Lock, Plus, Unlock } from "lucide-react";
+import type { MouseEvent } from "react";
+import { ReactSortable } from "react-sortablejs";
 
 type Props = {
   state: SaverState;
@@ -39,8 +39,8 @@ function TabItem(props: TabItemProps) {
     <div
       data-id={props.tab.id}
       className={cn(
-        'group flex h-9 max-w-44 shrink-0 cursor-grab items-center rounded-md border bg-card text-muted-foreground transition-colors',
-        props.active && 'border-primary/15 bg-accent text-foreground',
+        "group flex h-9 max-w-44 shrink-0 cursor-grab items-center rounded-md border bg-card text-muted-foreground transition-colors",
+        props.active && "border-primary/15 bg-accent text-foreground",
         // isInbox(props.tab) && 'border-amber-500/40',
       )}
       onContextMenu={handleContextMenu}
@@ -60,7 +60,12 @@ function TabItem(props: TabItemProps) {
           )
         ) : null}
         <span className="truncate">{props.tab.name}</span>
-        {props.synced && <Cloud className="size-3.5 shrink-0 text-sky-500" aria-label="Synced" />}
+        {props.synced && (
+          <Cloud
+            className="size-3.5 shrink-0 text-sky-500"
+            aria-label="Synced"
+          />
+        )}
       </button>
     </div>
   );
@@ -68,9 +73,17 @@ function TabItem(props: TabItemProps) {
 
 function TabsToolbarView(props: Props) {
   return (
-    <div className="tabs-toolbar mt-2.5 flex min-h-10 items-start gap-1.5" data-tour="tabs">
+    <div
+      className="tabs-toolbar mt-2.5 flex min-h-10 items-start gap-1.5"
+      data-tour="tabs"
+    >
       <ReactSortable
-        list={props.state.tabs.map((tab) => ({ ...tab })) as (SaverTab & { chosen?: boolean; selected?: boolean })[]}
+        list={
+          props.state.tabs.map((tab) => ({ ...tab })) as (SaverTab & {
+            chosen?: boolean;
+            selected?: boolean;
+          })[]
+        }
         setList={props.onReorder}
         animation={160}
         delay={80}
@@ -118,7 +131,9 @@ export function TabsToolbar() {
       isUnlocked={actions.isUnlocked}
       onSwitch={(tabId) => void actions.switchTab(tabId)}
       onReorder={(tabs) => void actions.reorderTabs(tabs)}
-      onOpenContextMenu={(tabId, x, y) => actions.openContextMenu({ tabId, x, y })}
+      onOpenContextMenu={(tabId, x, y) =>
+        actions.openContextMenu({ tabId, x, y })
+      }
       onAdd={() => void actions.addTab()}
     />
   );

@@ -38,12 +38,12 @@ Send `Accept: application/json`, plus `Content-Type: application/json` when ther
 
 ```json
 {
-    "product": "text-saver",
-    "license_key": "AST-TS-XXXX-XXXX-XXXX",
-    "device_id": "550e8400-...",
-    "device_name": "Chrome on MacBook Pro",
-    "platform": "mac",
-    "app_version": "6.0.0"
+  "product": "text-saver",
+  "license_key": "AST-TS-XXXX-XXXX-XXXX",
+  "device_id": "550e8400-...",
+  "device_name": "Chrome on MacBook Pro",
+  "platform": "mac",
+  "app_version": "6.0.0"
 }
 ```
 
@@ -55,33 +55,33 @@ Both return:
 
 ```json
 {
-    "token_type": "Bearer",
-    "access_token": "lat_...",
-    "expires_in": 1800,
-    "refresh_token": "lrt_...",
-    "refresh_token_expires_in": 2592000,
-    "license": {
-        "product": "text-saver",
-        "plan": "Pro Monthly",
-        "billing_type": "subscription",
-        "status": "active",
-        "expires_at": "2026-10-14T10:00:00+00:00",
-        "subscription": {
-            "status": "active",
-            "current_period_end": "2026-10-14T10:00:00+00:00"
-        },
-        "max_devices": 2,
-        "active_devices": 1
+  "token_type": "Bearer",
+  "access_token": "lat_...",
+  "expires_in": 1800,
+  "refresh_token": "lrt_...",
+  "refresh_token_expires_in": 2592000,
+  "license": {
+    "product": "text-saver",
+    "plan": "Pro Monthly",
+    "billing_type": "subscription",
+    "status": "active",
+    "expires_at": "2026-10-14T10:00:00+00:00",
+    "subscription": {
+      "status": "active",
+      "current_period_end": "2026-10-14T10:00:00+00:00"
     },
-    "entitlements": ["cloud_sync", "export"],
-    "device": {
-        "id": "0199a3e4-...",
-        "device_name": "Chrome on MacBook Pro",
-        "platform": "mac",
-        "app_version": "6.0.0",
-        "activated_at": "2026-09-14T10:00:00+00:00",
-        "last_seen_at": "2026-09-14T10:00:00+00:00"
-    }
+    "max_devices": 2,
+    "active_devices": 1
+  },
+  "entitlements": ["cloud_sync", "export"],
+  "device": {
+    "id": "0199a3e4-...",
+    "device_name": "Chrome on MacBook Pro",
+    "platform": "mac",
+    "app_version": "6.0.0",
+    "activated_at": "2026-09-14T10:00:00+00:00",
+    "last_seen_at": "2026-09-14T10:00:00+00:00"
+  }
 }
 ```
 
@@ -153,362 +153,356 @@ Rate limits: 60 requests per minute per IP, 10 activations per minute per IP, 5 
 Adapt the storage calls (`chrome.storage.local` here) to the platform. Keep the refresh and error handling semantics.
 
 ```ts
-const API_BASE_URL = '{{API_BASE_URL}}';
-const PRODUCT = 'your-product-slug';
+const API_BASE_URL = "{{API_BASE_URL}}";
+const PRODUCT = "your-product-slug";
 const OFFLINE_GRACE_MS = 3 * 24 * 60 * 60 * 1000;
 
 export type License = {
-    product: string;
-    plan: string;
-    billing_type: 'subscription' | 'lifetime';
-    status: 'active' | 'expired' | 'revoked';
-    expires_at: string | null;
-    subscription: { status: string; current_period_end: string | null } | null;
-    max_devices: number;
-    active_devices: number;
+  product: string;
+  plan: string;
+  billing_type: "subscription" | "lifetime";
+  status: "active" | "expired" | "revoked";
+  expires_at: string | null;
+  subscription: { status: string; current_period_end: string | null } | null;
+  max_devices: number;
+  active_devices: number;
 };
 
 export type Device = {
-    id: string;
-    device_name: string | null;
-    platform: string | null;
-    app_version: string | null;
-    activated_at: string;
-    last_seen_at: string | null;
-    is_current?: boolean;
+  id: string;
+  device_name: string | null;
+  platform: string | null;
+  app_version: string | null;
+  activated_at: string;
+  last_seen_at: string | null;
+  is_current?: boolean;
 };
 
 type Session = {
-    accessToken: string;
-    accessTokenExpiresAt: number;
-    refreshToken: string;
+  accessToken: string;
+  accessTokenExpiresAt: number;
+  refreshToken: string;
 };
 
 type TokenResponse = {
-    access_token: string;
-    expires_in: number;
-    refresh_token: string;
-    license: License;
-    entitlements: string[];
+  access_token: string;
+  expires_in: number;
+  refresh_token: string;
+  license: License;
+  entitlements: string[];
 };
 
 export class LicensingError extends Error {
-    constructor(
-        readonly status: number,
-        readonly code: string,
-        message: string,
-        readonly body: Record<string, unknown> = {},
-    ) {
-        super(message);
-    }
+  constructor(
+    readonly status: number,
+    readonly code: string,
+    message: string,
+    readonly body: Record<string, unknown> = {},
+  ) {
+    super(message);
+  }
 
-    get isTemporary(): boolean {
-        return this.status === 0 || this.status === 429 || this.status >= 500;
-    }
+  get isTemporary(): boolean {
+    return this.status === 0 || this.status === 429 || this.status >= 500;
+  }
 }
 
 async function request<T>(
-    method: 'GET' | 'POST' | 'DELETE',
-    path: string,
-    options: { body?: Record<string, unknown>; accessToken?: string } = {},
+  method: "GET" | "POST" | "DELETE",
+  path: string,
+  options: { body?: Record<string, unknown>; accessToken?: string } = {},
 ): Promise<T> {
-    let response: Response;
+  let response: Response;
 
-    try {
-        response = await fetch(`${API_BASE_URL}${path}`, {
-            method,
-            headers: {
-                Accept: 'application/json',
-                ...(options.body ? { 'Content-Type': 'application/json' } : {}),
-                ...(options.accessToken
-                    ? { Authorization: `Bearer ${options.accessToken}` }
-                    : {}),
-            },
-            body: options.body ? JSON.stringify(options.body) : undefined,
-        });
-    } catch {
-        throw new LicensingError(
-            0,
-            'network_error',
-            'The licensing server could not be reached.',
-        );
-    }
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      method,
+      headers: {
+        Accept: "application/json",
+        ...(options.body ? { "Content-Type": "application/json" } : {}),
+        ...(options.accessToken
+          ? { Authorization: `Bearer ${options.accessToken}` }
+          : {}),
+      },
+      body: options.body ? JSON.stringify(options.body) : undefined,
+    });
+  } catch {
+    throw new LicensingError(
+      0,
+      "network_error",
+      "The licensing server could not be reached.",
+    );
+  }
 
-    if (response.status === 204) {
-        return undefined as T;
-    }
+  if (response.status === 204) {
+    return undefined as T;
+  }
 
-    const json = await response.json().catch(() => ({}));
+  const json = await response.json().catch(() => ({}));
 
-    if (!response.ok) {
-        throw new LicensingError(
-            response.status,
-            json.error ?? `http_${response.status}`,
-            json.message ?? response.statusText,
-            json,
-        );
-    }
+  if (!response.ok) {
+    throw new LicensingError(
+      response.status,
+      json.error ?? `http_${response.status}`,
+      json.message ?? response.statusText,
+      json,
+    );
+  }
 
-    return json as T;
+  return json as T;
 }
 
 export async function getDeviceId(): Promise<string> {
-    const { deviceId } = await chrome.storage.local.get('deviceId');
+  const { deviceId } = await chrome.storage.local.get("deviceId");
 
-    if (typeof deviceId === 'string') {
-        return deviceId;
-    }
+  if (typeof deviceId === "string") {
+    return deviceId;
+  }
 
-    const newDeviceId = crypto.randomUUID();
-    await chrome.storage.local.set({ deviceId: newDeviceId });
+  const newDeviceId = crypto.randomUUID();
+  await chrome.storage.local.set({ deviceId: newDeviceId });
 
-    return newDeviceId;
+  return newDeviceId;
 }
 
 async function storedSession(): Promise<Session | null> {
-    const { session } = await chrome.storage.local.get('session');
+  const { session } = await chrome.storage.local.get("session");
 
-    return (session as Session | undefined) ?? null;
+  return (session as Session | undefined) ?? null;
 }
 
 async function saveTokens(tokens: TokenResponse): Promise<Session> {
-    const session: Session = {
-        accessToken: tokens.access_token,
-        accessTokenExpiresAt: Date.now() + tokens.expires_in * 1000,
-        refreshToken: tokens.refresh_token,
-    };
+  const session: Session = {
+    accessToken: tokens.access_token,
+    accessTokenExpiresAt: Date.now() + tokens.expires_in * 1000,
+    refreshToken: tokens.refresh_token,
+  };
 
-    await chrome.storage.local.set({
-        session,
-        license: tokens.license,
-        entitlements: tokens.entitlements,
-        checkedAt: Date.now(),
-    });
+  await chrome.storage.local.set({
+    session,
+    license: tokens.license,
+    entitlements: tokens.entitlements,
+    checkedAt: Date.now(),
+  });
 
-    return session;
+  return session;
 }
 
 async function clearLocalLicense(): Promise<void> {
-    await chrome.storage.local.remove([
-        'session',
-        'license',
-        'entitlements',
-        'checkedAt',
-        'syncRevision',
-    ]);
+  await chrome.storage.local.remove([
+    "session",
+    "license",
+    "entitlements",
+    "checkedAt",
+    "syncRevision",
+  ]);
 }
 
 // The license key is used once and never stored.
 export async function activateLicense(licenseKey: string): Promise<License> {
-    const tokens = await request<TokenResponse>('POST', '/licenses/activate', {
-        body: {
-            product: PRODUCT,
-            license_key: licenseKey.trim(),
-            device_id: await getDeviceId(),
-            device_name: 'Chrome',
-            app_version: chrome.runtime.getManifest().version,
-        },
-    });
+  const tokens = await request<TokenResponse>("POST", "/licenses/activate", {
+    body: {
+      product: PRODUCT,
+      license_key: licenseKey.trim(),
+      device_id: await getDeviceId(),
+      device_name: "Chrome",
+      app_version: chrome.runtime.getManifest().version,
+    },
+  });
 
-    await saveTokens(tokens);
+  await saveTokens(tokens);
 
-    return tokens.license;
+  return tokens.license;
 }
 
 let refreshing: Promise<Session | null> | null = null;
 
 // Exchanges the refresh token exactly once, however many callers need a new access token.
 function refreshSession(stale: Session): Promise<Session | null> {
-    refreshing ??= (async () => {
-        try {
-            const current = await storedSession();
+  refreshing ??= (async () => {
+    try {
+      const current = await storedSession();
 
-            // Another caller already rotated the tokens; a used refresh token must never be sent again.
-            if (
-                current === null ||
-                current.refreshToken !== stale.refreshToken
-            ) {
-                return current;
-            }
+      // Another caller already rotated the tokens; a used refresh token must never be sent again.
+      if (current === null || current.refreshToken !== stale.refreshToken) {
+        return current;
+      }
 
-            return await saveTokens(
-                await request<TokenResponse>('POST', '/auth/refresh', {
-                    body: { refresh_token: stale.refreshToken },
-                }),
-            );
-        } catch (error) {
-            if (error instanceof LicensingError && !error.isTemporary) {
-                await clearLocalLicense();
+      return await saveTokens(
+        await request<TokenResponse>("POST", "/auth/refresh", {
+          body: { refresh_token: stale.refreshToken },
+        }),
+      );
+    } catch (error) {
+      if (error instanceof LicensingError && !error.isTemporary) {
+        await clearLocalLicense();
 
-                return null;
-            }
+        return null;
+      }
 
-            throw error;
-        } finally {
-            refreshing = null;
-        }
-    })();
+      throw error;
+    } finally {
+      refreshing = null;
+    }
+  })();
 
-    return refreshing;
+  return refreshing;
 }
 
 export async function authorized<T>(
-    method: 'GET' | 'POST' | 'DELETE',
-    path: string,
-    body?: Record<string, unknown>,
+  method: "GET" | "POST" | "DELETE",
+  path: string,
+  body?: Record<string, unknown>,
 ): Promise<T> {
-    let session = await storedSession();
+  let session = await storedSession();
 
+  if (session !== null && session.accessTokenExpiresAt - 60_000 < Date.now()) {
+    session = await refreshSession(session);
+  }
+
+  if (session === null) {
+    throw new LicensingError(
+      401,
+      "session_revoked",
+      "This device is not signed in.",
+    );
+  }
+
+  try {
+    return await request<T>(method, path, {
+      body,
+      accessToken: session.accessToken,
+    });
+  } catch (error) {
     if (
-        session !== null &&
-        session.accessTokenExpiresAt - 60_000 < Date.now()
+      !(error instanceof LicensingError) ||
+      error.code !== "access_token_expired"
     ) {
-        session = await refreshSession(session);
+      throw error;
     }
 
-    if (session === null) {
-        throw new LicensingError(
-            401,
-            'session_revoked',
-            'This device is not signed in.',
-        );
+    const refreshed = await refreshSession(session);
+
+    if (refreshed === null) {
+      throw error;
     }
 
-    try {
-        return await request<T>(method, path, {
-            body,
-            accessToken: session.accessToken,
-        });
-    } catch (error) {
-        if (
-            !(error instanceof LicensingError) ||
-            error.code !== 'access_token_expired'
-        ) {
-            throw error;
-        }
-
-        const refreshed = await refreshSession(session);
-
-        if (refreshed === null) {
-            throw error;
-        }
-
-        return request<T>(method, path, {
-            body,
-            accessToken: refreshed.accessToken,
-        });
-    }
+    return request<T>(method, path, {
+      body,
+      accessToken: refreshed.accessToken,
+    });
+  }
 }
 
 // Returns the license to trust right now, or null when paid features should be locked.
 export async function checkLicense(): Promise<License | null> {
-    const { license, checkedAt } = await chrome.storage.local.get([
-        'license',
-        'checkedAt',
-    ]);
+  const { license, checkedAt } = await chrome.storage.local.get([
+    "license",
+    "checkedAt",
+  ]);
 
-    try {
-        const result = await authorized<{
-            license: License;
-            entitlements: string[];
-        }>('GET', '/license');
-        await chrome.storage.local.set({
-            license: result.license,
-            entitlements: result.entitlements,
-            checkedAt: Date.now(),
-        });
+  try {
+    const result = await authorized<{
+      license: License;
+      entitlements: string[];
+    }>("GET", "/license");
+    await chrome.storage.local.set({
+      license: result.license,
+      entitlements: result.entitlements,
+      checkedAt: Date.now(),
+    });
 
-        return result.license;
-    } catch (error) {
-        if (error instanceof LicensingError && error.isTemporary) {
-            const isWithinGrace =
-                typeof checkedAt === 'number' &&
-                Date.now() - checkedAt < OFFLINE_GRACE_MS;
+    return result.license;
+  } catch (error) {
+    if (error instanceof LicensingError && error.isTemporary) {
+      const isWithinGrace =
+        typeof checkedAt === "number" &&
+        Date.now() - checkedAt < OFFLINE_GRACE_MS;
 
-            return isWithinGrace ? (license as License) : null;
-        }
-
-        if (error instanceof LicensingError && error.status === 401) {
-            await clearLocalLicense();
-        }
-
-        return null;
+      return isWithinGrace ? (license as License) : null;
     }
+
+    if (error instanceof LicensingError && error.status === 401) {
+      await clearLocalLicense();
+    }
+
+    return null;
+  }
 }
 
 // For UI only; the server re-checks entitlements on every premium request.
 export async function hasEntitlement(entitlement: string): Promise<boolean> {
-    const { entitlements } = await chrome.storage.local.get('entitlements');
+  const { entitlements } = await chrome.storage.local.get("entitlements");
 
-    return Array.isArray(entitlements) && entitlements.includes(entitlement);
+  return Array.isArray(entitlements) && entitlements.includes(entitlement);
 }
 
 export async function listDevices(): Promise<{
-    max_devices: number;
-    devices: Device[];
+  max_devices: number;
+  devices: Device[];
 }> {
-    return authorized('GET', '/devices');
+  return authorized("GET", "/devices");
 }
 
 export async function deactivateDevice(id: string): Promise<void> {
-    await authorized('DELETE', `/devices/${encodeURIComponent(id)}`);
+  await authorized("DELETE", `/devices/${encodeURIComponent(id)}`);
 }
 
 export async function revokeDevice(id: string): Promise<void> {
-    await authorized('POST', `/devices/${encodeURIComponent(id)}/revoke`);
+  await authorized("POST", `/devices/${encodeURIComponent(id)}/revoke`);
 }
 
 export async function signOut(): Promise<void> {
-    try {
-        await authorized('POST', '/auth/logout');
-    } catch (error) {
-        // Any definite answer means this device is already signed out or can't continue.
-        if (error instanceof LicensingError && error.isTemporary) {
-            throw error;
-        }
+  try {
+    await authorized("POST", "/auth/logout");
+  } catch (error) {
+    // Any definite answer means this device is already signed out or can't continue.
+    if (error instanceof LicensingError && error.isTemporary) {
+      throw error;
     }
+  }
 
-    await clearLocalLicense();
+  await clearLocalLicense();
 }
 
 export async function pushSyncData(
-    localData: string,
-    merge: (remote: string | null, local: string) => string,
+  localData: string,
+  merge: (remote: string | null, local: string) => string,
 ): Promise<number> {
-    const { syncRevision } = await chrome.storage.local.get('syncRevision');
-    let revision = typeof syncRevision === 'number' ? syncRevision : 0;
-    let data = localData;
+  const { syncRevision } = await chrome.storage.local.get("syncRevision");
+  let revision = typeof syncRevision === "number" ? syncRevision : 0;
+  let data = localData;
 
-    for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-            const result = await authorized<{ revision: number }>(
-                'POST',
-                '/sync/push',
-                { revision, data },
-            );
-            await chrome.storage.local.set({ syncRevision: result.revision });
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const result = await authorized<{ revision: number }>(
+        "POST",
+        "/sync/push",
+        { revision, data },
+      );
+      await chrome.storage.local.set({ syncRevision: result.revision });
 
-            return result.revision;
-        } catch (error) {
-            if (
-                !(error instanceof LicensingError) ||
-                error.code !== 'sync_conflict'
-            ) {
-                throw error;
-            }
+      return result.revision;
+    } catch (error) {
+      if (
+        !(error instanceof LicensingError) ||
+        error.code !== "sync_conflict"
+      ) {
+        throw error;
+      }
 
-            const remote = await authorized<{
-                revision: number;
-                data: string | null;
-            }>('POST', '/sync/pull');
-            revision = remote.revision;
-            data = merge(remote.data, localData);
-        }
+      const remote = await authorized<{
+        revision: number;
+        data: string | null;
+      }>("POST", "/sync/pull");
+      revision = remote.revision;
+      data = merge(remote.data, localData);
     }
+  }
 
-    throw new Error(
-        'Sync kept conflicting with another device. Try again later.',
-    );
+  throw new Error(
+    "Sync kept conflicting with another device. Try again later.",
+  );
 }
 ```
 

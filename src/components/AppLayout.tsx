@@ -1,12 +1,12 @@
-import { LoadingScreen, ToastMessage } from '@/components/AppFeedback';
-import { AppHeader } from '@/components/AppHeader';
-import { EditorFooter } from '@/components/EditorFooter';
-import { EditorPanel } from '@/components/EditorPanel';
-import { PlanPanel } from '@/components/PlanPanel';
-import { PromptDialog } from '@/components/PromptDialog';
-import { TabContextMenu } from '@/components/TabContextMenu';
-import { TabsToolbar } from '@/components/TabsToolbar';
-import { useTextSaver } from '@/context/TextSaverContext';
+import { LoadingScreen, ToastMessage } from "@/components/AppFeedback";
+import { AppHeader } from "@/components/AppHeader";
+import { EditorFooter } from "@/components/EditorFooter";
+import { EditorPanel } from "@/components/EditorPanel";
+import { PlanPanel } from "@/components/PlanPanel";
+import { PromptDialog } from "@/components/PromptDialog";
+import { TabContextMenu } from "@/components/TabContextMenu";
+import { TabsToolbar } from "@/components/TabsToolbar";
+import { useTextSaver } from "@/context/TextSaverContext";
 
 export function AppLayout() {
   const { state, activeTab, actions } = useTextSaver();

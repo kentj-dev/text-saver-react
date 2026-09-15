@@ -1,10 +1,14 @@
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { useTextSaver } from '@/context/TextSaverContext';
-import { formatByteSize, isInbox, licenseStatusText } from '@/lib/app-utils';
-import { BILLING_CONFIG, isCheckoutConfigured, isLicensingConfigured } from '@/lib/config.js';
-import { serializedStateBytes } from '@/lib/plans.js';
-import type { SaverTab, SyncSettings } from '@/types';
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useTextSaver } from "@/context/TextSaverContext";
+import { formatByteSize, isInbox, licenseStatusText } from "@/lib/app-utils";
+import {
+  BILLING_CONFIG,
+  isCheckoutConfigured,
+  isLicensingConfigured,
+} from "@/lib/config.js";
+import { serializedStateBytes } from "@/lib/plans.js";
+import type { SaverTab, SyncSettings } from "@/types";
 import {
   Check,
   Cloud,
@@ -20,9 +24,9 @@ import {
   ShieldX,
   Unplug,
   X,
-} from 'lucide-react';
+} from "lucide-react";
 
-const compactButton = 'h-8 gap-1.5 px-2.5 text-[12px]';
+const compactButton = "h-8 gap-1.5 px-2.5 text-[12px]";
 
 function PanelHeader() {
   const { plan, actions } = useTextSaver();
@@ -64,7 +68,8 @@ function PlanStatusBar() {
         <span className="truncate">{licenseStatusText(plan.license)}</span>
       </p>
       <p className="whitespace-nowrap text-[11px] text-muted-foreground">
-        {normalTabCount}/{plan.active.maxTabs} tabs · {formatByteSize(storageUsed)}/
+        {normalTabCount}/{plan.active.maxTabs} tabs ·{" "}
+        {formatByteSize(storageUsed)}/
         {formatByteSize(plan.active.maxStateBytes)}
       </p>
     </div>
@@ -85,14 +90,24 @@ function ErrorBanner() {
   );
 }
 
-function SectionHeading({ icon, title, detail }: { icon: React.ReactNode; title: string; detail?: string }) {
+function SectionHeading({
+  icon,
+  title,
+  detail,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  detail?: string;
+}) {
   return (
     <div className="flex items-center justify-between gap-2">
       <div className="flex items-center gap-2">
         <span className="text-muted-foreground">{icon}</span>
         <h2 className="text-[13px] font-semibold">{title}</h2>
       </div>
-      {detail && <span className="text-[10px] text-muted-foreground">{detail}</span>}
+      {detail && (
+        <span className="text-[10px] text-muted-foreground">{detail}</span>
+      )}
     </div>
   );
 }
@@ -100,26 +115,47 @@ function SectionHeading({ icon, title, detail }: { icon: React.ReactNode; title:
 function ActivationSection() {
   const { plan, actions } = useTextSaver();
   const configured = isLicensingConfigured();
-  const activated = plan.license?.status === 'active' || plan.license?.status === 'offline_grace';
-  const needsRenewal = Boolean(plan.license && ['expired', 'subscription_expired', 'subscription_inactive'].includes(plan.license.status));
-  const needsCheck = plan.license?.status === 'offline_locked';
+  const activated =
+    plan.license?.status === "active" ||
+    plan.license?.status === "offline_grace";
+  const needsRenewal = Boolean(
+    plan.license &&
+    ["expired", "subscription_expired", "subscription_inactive"].includes(
+      plan.license.status,
+    ),
+  );
+  const needsCheck = plan.license?.status === "offline_locked";
   const needsAttention = needsRenewal || needsCheck;
 
   return (
     <section className="shrink-0 rounded-lg border border-border bg-card p-3">
       <SectionHeading
-        icon={activated ? <Check className="size-4 text-emerald-500" /> : <KeyRound className="size-4" />}
-        title={activated ? 'Plus activated' : needsAttention ? 'Plus needs attention' : 'Activate Plus'}
+        icon={
+          activated ? (
+            <Check className="size-4 text-emerald-500" />
+          ) : (
+            <KeyRound className="size-4" />
+          )
+        }
+        title={
+          activated
+            ? "Plus activated"
+            : needsAttention
+              ? "Plus needs attention"
+              : "Activate Plus"
+        }
       />
       <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
         {activated
-          ? `Plan: ${plan.license?.plan || 'Plus'} · Device: ${plan.license?.deviceName}`
+          ? `Plan: ${plan.license?.plan || "Plus"} · Device: ${plan.license?.deviceName}`
           : needsAttention
             ? licenseStatusText(plan.license)
-          : 'Use the key from your receipt. One license supports two devices.'}
+            : "Use the key from your receipt. One license supports two devices."}
       </p>
       {!configured && !plan.license && (
-        <p className="mt-2 text-[11px] text-destructive">Billing configuration is incomplete.</p>
+        <p className="mt-2 text-[11px] text-destructive">
+          Billing configuration is incomplete.
+        </p>
       )}
 
       {!activated && !needsAttention && (
@@ -151,14 +187,27 @@ function ActivationSection() {
 
       <div className="mt-2.5 flex flex-wrap gap-1.5">
         {!activated && !needsAttention && (
-          <Button className={compactButton} disabled={plan.busy} onClick={actions.activateLicense}>
-            {plan.busy ? <LoaderCircle className="animate-spin" /> : <KeyRound />}
+          <Button
+            className={compactButton}
+            disabled={plan.busy}
+            onClick={actions.activateLicense}
+          >
+            {plan.busy ? (
+              <LoaderCircle className="animate-spin" />
+            ) : (
+              <KeyRound />
+            )}
             Activate
           </Button>
         )}
         {activated && (
           <>
-            <Button className={compactButton} variant="outline" disabled={plan.busy} onClick={actions.validateLicense}>
+            <Button
+              className={compactButton}
+              variant="outline"
+              disabled={plan.busy}
+              onClick={actions.validateLicense}
+            >
               <RefreshCw /> Validate
             </Button>
             <Button
@@ -173,10 +222,20 @@ function ActivationSection() {
         )}
         {needsAttention && (
           <>
-            <Button className={compactButton} variant="outline" disabled={plan.busy} onClick={actions.validateLicense}>
+            <Button
+              className={compactButton}
+              variant="outline"
+              disabled={plan.busy}
+              onClick={actions.validateLicense}
+            >
               <RefreshCw /> Check again
             </Button>
-            <Button className={compactButton} variant="destructive" disabled={plan.busy} onClick={actions.deactivateCurrent}>
+            <Button
+              className={compactButton}
+              variant="destructive"
+              disabled={plan.busy}
+              onClick={actions.deactivateCurrent}
+            >
               Sign out
             </Button>
           </>
@@ -188,14 +247,19 @@ function ActivationSection() {
 
 function LicenseUsageSection() {
   const { plan, actions } = useTextSaver();
-  if (!plan.license || !['active', 'offline_grace', 'refreshing'].includes(plan.license.status)) return null;
+  if (
+    !plan.license ||
+    !["active", "offline_grace", "refreshing"].includes(plan.license.status)
+  )
+    return null;
   const activeDevices = plan.license.activeDevices ?? 0;
   const maxDevices = plan.license.maxDevices ?? plan.active.maxDevices;
-  const billing = plan.license.billingType === 'lifetime'
-    ? 'Lifetime access'
-    : plan.license.expiresAt
-      ? `Renews or expires ${new Date(plan.license.expiresAt).toLocaleDateString()}`
-      : 'Subscription';
+  const billing =
+    plan.license.billingType === "lifetime"
+      ? "Lifetime access"
+      : plan.license.expiresAt
+        ? `Renews or expires ${new Date(plan.license.expiresAt).toLocaleDateString()}`
+        : "Subscription";
 
   return (
     <section className="shrink-0 rounded-lg border border-border bg-card p-3">
@@ -205,12 +269,19 @@ function LicenseUsageSection() {
         detail={`${activeDevices}/${maxDevices} devices`}
       />
       <div className="mt-2 rounded-md bg-muted/45 px-2.5 py-2">
-        <p className="truncate text-[12px] font-medium">{plan.license.deviceName}</p>
+        <p className="truncate text-[12px] font-medium">
+          {plan.license.deviceName}
+        </p>
         <p className="mt-0.5 text-[10px] text-muted-foreground">
           This device · {billing}
         </p>
       </div>
-      <Button className={`${compactButton} mt-2`} variant="outline" disabled={plan.busy} onClick={actions.refreshDevices}>
+      <Button
+        className={`${compactButton} mt-2`}
+        variant="outline"
+        disabled={plan.busy}
+        onClick={actions.refreshDevices}
+      >
         <Monitor /> Manage devices
       </Button>
     </section>
@@ -226,11 +297,17 @@ function DeviceManagementSection() {
       <SectionHeading
         icon={<Monitor className="size-4" />}
         title="Activated devices"
-        detail={plan.deviceLimit ? `${plan.devices.length}/${plan.deviceLimit}` : undefined}
+        detail={
+          plan.deviceLimit
+            ? `${plan.devices.length}/${plan.deviceLimit}`
+            : undefined
+        }
       />
       {!plan.devices.length ? (
         <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-          No device list is available from this session. If all slots are occupied, deactivate a device from an installation that is already signed in, then try this activation again.
+          No device list is available from this session. If all slots are
+          occupied, deactivate a device from an installation that is already
+          signed in, then try this activation again.
         </p>
       ) : (
         <div className="mt-2 grid gap-1.5">
@@ -239,12 +316,18 @@ function DeviceManagementSection() {
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="truncate text-[12px] font-medium">
-                    {device.deviceName || 'Unnamed device'} {device.isCurrent ? '· This device' : ''}
+                    {device.deviceName || "Unnamed device"}{" "}
+                    {device.isCurrent ? "· This device" : ""}
                   </p>
                   <p className="mt-0.5 text-[10px] text-muted-foreground">
-                    {[device.platform, device.lastSeenAt ? `Seen ${new Date(device.lastSeenAt).toLocaleDateString()}` : null]
+                    {[
+                      device.platform,
+                      device.lastSeenAt
+                        ? `Seen ${new Date(device.lastSeenAt).toLocaleDateString()}`
+                        : null,
+                    ]
                       .filter(Boolean)
-                      .join(' · ')}
+                      .join(" · ")}
                   </p>
                 </div>
                 {!device.isCurrent && (
@@ -254,7 +337,7 @@ function DeviceManagementSection() {
                       variant="outline"
                       className="size-7"
                       disabled={plan.busy}
-                      aria-label={`Deactivate ${device.deviceName || 'device'}`}
+                      aria-label={`Deactivate ${device.deviceName || "device"}`}
                       title="Deactivate (can activate again)"
                       onClick={() => actions.deactivateDevice(device.id)}
                     >
@@ -265,7 +348,7 @@ function DeviceManagementSection() {
                       variant="destructive"
                       className="size-7"
                       disabled={plan.busy}
-                      aria-label={`Permanently revoke ${device.deviceName || 'device'}`}
+                      aria-label={`Permanently revoke ${device.deviceName || "device"}`}
                       title="Permanently revoke"
                       onClick={() => actions.revokeDevice(device.id)}
                     >
@@ -285,20 +368,27 @@ function DeviceManagementSection() {
 function UpgradePanel() {
   const { plan } = useTextSaver();
   const configured = isCheckoutConfigured();
-  const renewal = Boolean(plan.license && ['expired', 'subscription_expired', 'subscription_inactive'].includes(plan.license.status));
-  const offlineLocked = plan.license?.status === 'offline_locked';
+  const renewal = Boolean(
+    plan.license &&
+    ["expired", "subscription_expired", "subscription_inactive"].includes(
+      plan.license.status,
+    ),
+  );
+  const offlineLocked = plan.license?.status === "offline_locked";
   const features = [
-    '20 local tabs',
-    '20k characters per tab',
-    '5 synced tabs across 2 devices',
-    '5 MiB encrypted cloud storage',
+    "20 local tabs",
+    "20k characters per tab",
+    "5 synced tabs across 2 devices",
+    "5 MiB encrypted cloud storage",
   ];
 
   return (
     <section className="flex shrink-0 flex-col rounded-lg border border-amber-500/30 bg-card p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-500">One-time upgrade</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-500">
+            One-time upgrade
+          </p>
           <h2 className="mt-1 text-lg font-semibold">Plus</h2>
         </div>
         <div className="text-right">
@@ -308,7 +398,8 @@ function UpgradePanel() {
       </div>
 
       <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
-        More room locally, plus end-to-end encrypted sync for the tabs you choose.
+        More room locally, plus end-to-end encrypted sync for the tabs you
+        choose.
       </p>
       <ul className="mt-4 grid gap-2 text-[12px]">
         {features.map((feature) => (
@@ -328,8 +419,12 @@ function UpgradePanel() {
           </Button>
         ) : configured ? (
           <Button asChild className="h-9 w-full text-[12px]">
-            <a href={BILLING_CONFIG.plusCheckoutUrl} target="_blank" rel="noreferrer">
-              {renewal ? 'Renew Plus' : 'Buy Plus'} <ExternalLink />
+            <a
+              href={BILLING_CONFIG.plusCheckoutUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {renewal ? "Renew Plus" : "Buy Plus"} <ExternalLink />
             </a>
           </Button>
         ) : (
@@ -343,14 +438,16 @@ function UpgradePanel() {
 }
 
 function formatSyncStatus(settings: SyncSettings | null) {
-  if (!settings?.enabled) return 'Not configured';
-  if (settings.status === 'pending') {
-    return settings.error || 'Changes are saved locally and waiting to sync';
+  if (!settings?.enabled) return "Not configured";
+  if (settings.status === "pending") {
+    return settings.error || "Changes are saved locally and waiting to sync";
   }
-  if (settings.status === 'error' || settings.status === 'password-required') {
-    return settings.error || 'Sync needs attention';
+  if (settings.status === "error" || settings.status === "password-required") {
+    return settings.error || "Sync needs attention";
   }
-  return settings.lastSyncedAt ? `Synced ${new Date(settings.lastSyncedAt).toLocaleString()}` : 'Ready to sync';
+  return settings.lastSyncedAt
+    ? `Synced ${new Date(settings.lastSyncedAt).toLocaleString()}`
+    : "Ready to sync";
 }
 
 function SyncTabItem({ tab }: { tab: SaverTab }) {
@@ -364,12 +461,18 @@ function SyncTabItem({ tab }: { tab: SaverTab }) {
       className="flex min-h-9 w-full items-center justify-between gap-2 rounded-md border border-border bg-background px-2.5 py-1.5 text-left transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-45"
       disabled={plan.busy || (!selected && atLimit)}
       aria-pressed={selected}
-      title={!selected && atLimit ? `You can sync up to ${plan.active.maxSyncedTabs} tabs.` : undefined}
+      title={
+        !selected && atLimit
+          ? `You can sync up to ${plan.active.maxSyncedTabs} tabs.`
+          : undefined
+      }
       onClick={() => actions.toggleTabSync(tab.id)}
     >
-      <span className="min-w-0 truncate text-[12px] font-medium">{tab.name}</span>
+      <span className="min-w-0 truncate text-[12px] font-medium">
+        {tab.name}
+      </span>
       <span
-        className={`grid size-4 shrink-0 place-items-center rounded border ${selected ? 'border-amber-500 bg-amber-500 text-black' : 'border-muted-foreground/40'}`}
+        className={`grid size-4 shrink-0 place-items-center rounded border ${selected ? "border-amber-500 bg-amber-500 text-black" : "border-muted-foreground/40"}`}
       >
         {selected && <Check className="size-3" />}
       </span>
@@ -385,13 +488,22 @@ function CloudSyncSection() {
   return (
     <section className="flex shrink-0 flex-col rounded-lg border border-border bg-card p-3">
       <SectionHeading
-        icon={enabled ? <Cloud className="size-4 text-amber-500" /> : <CloudOff className="size-4" />}
+        icon={
+          enabled ? (
+            <Cloud className="size-4 text-amber-500" />
+          ) : (
+            <CloudOff className="size-4" />
+          )
+        }
         title="Cloud sync"
         detail={`${syncedTabIds.size}/${plan.active.maxSyncedTabs} tabs`}
       />
-      <p className="mt-1 text-[11px] text-muted-foreground">{formatSyncStatus(plan.syncSettings)}</p>
+      <p className="mt-1 text-[11px] text-muted-foreground">
+        {formatSyncStatus(plan.syncSettings)}
+      </p>
       <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-        Choose which tabs follow your license to another device. Content is encrypted before upload.
+        Choose which tabs follow your license to another device. Content is
+        encrypted before upload.
       </p>
 
       <div className="mt-2.5 flex flex-col">
@@ -414,13 +526,26 @@ function CloudSyncSection() {
 
       <div className="mt-2.5 flex shrink-0 flex-wrap gap-1.5 border-t border-border pt-2.5">
         {!enabled ? (
-          <Button className={compactButton} disabled={plan.busy} onClick={() => actions.setupSync()}>
+          <Button
+            className={compactButton}
+            disabled={plan.busy}
+            onClick={() => actions.setupSync()}
+          >
             <Cloud /> Set up sync
           </Button>
         ) : (
           <>
-            <Button className={compactButton} disabled={plan.busy} onClick={actions.syncNow}>
-              {plan.busy ? <LoaderCircle className="animate-spin" /> : <RefreshCw />} Sync now
+            <Button
+              className={compactButton}
+              disabled={plan.busy}
+              onClick={actions.syncNow}
+            >
+              {plan.busy ? (
+                <LoaderCircle className="animate-spin" />
+              ) : (
+                <RefreshCw />
+              )}{" "}
+              Sync now
             </Button>
             <Button
               className={compactButton}
@@ -430,7 +555,12 @@ function CloudSyncSection() {
             >
               Reset cloud
             </Button>
-            <Button className={compactButton} variant="destructive" disabled={plan.busy} onClick={actions.turnOffSync}>
+            <Button
+              className={compactButton}
+              variant="destructive"
+              disabled={plan.busy}
+              onClick={actions.turnOffSync}
+            >
               Turn off
             </Button>
           </>
@@ -445,7 +575,10 @@ export function PlanPanel() {
   if (!plan.open) return null;
 
   return (
-    <section className="fixed inset-0 z-40 flex flex-col bg-background" aria-labelledby="plan-heading">
+    <section
+      className="fixed inset-0 z-40 flex flex-col bg-background"
+      aria-labelledby="plan-heading"
+    >
       <PanelHeader />
       <PlanStatusBar />
       <ErrorBanner />
