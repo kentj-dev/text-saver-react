@@ -14,8 +14,11 @@ import {
   HardDrive,
   KeyRound,
   LoaderCircle,
+  Monitor,
   RefreshCw,
   ShieldCheck,
+  ShieldX,
+  Unplug,
   X,
 } from 'lucide-react';
 
@@ -98,23 +101,28 @@ function ActivationSection() {
   const { plan, actions } = useTextSaver();
   const configured = isLicensingConfigured();
   const activated = plan.license?.status === 'active' || plan.license?.status === 'offline_grace';
+  const needsRenewal = Boolean(plan.license && ['expired', 'subscription_expired', 'subscription_inactive'].includes(plan.license.status));
+  const needsCheck = plan.license?.status === 'offline_locked';
+  const needsAttention = needsRenewal || needsCheck;
 
   return (
     <section className="shrink-0 rounded-lg border border-border bg-card p-3">
       <SectionHeading
         icon={activated ? <Check className="size-4 text-emerald-500" /> : <KeyRound className="size-4" />}
-        title={activated ? 'Plus activated' : 'Activate Plus'}
+        title={activated ? 'Plus activated' : needsAttention ? 'Plus needs attention' : 'Activate Plus'}
       />
       <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
         {activated
-          ? `Plan: Plus · Device: ${plan.license?.deviceName}`
+          ? `Plan: ${plan.license?.plan || 'Plus'} · Device: ${plan.license?.deviceName}`
+          : needsAttention
+            ? licenseStatusText(plan.license)
           : 'Use the key from your receipt. One license supports two devices.'}
       </p>
       {!configured && !plan.license && (
         <p className="mt-2 text-[11px] text-destructive">Billing configuration is incomplete.</p>
       )}
 
-      {!activated && (
+      {!activated && !needsAttention && (
         <div className="mt-2.5 grid grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)] gap-2">
           <label className="grid gap-1 text-[10px] font-medium text-muted-foreground">
             License key
@@ -142,7 +150,7 @@ function ActivationSection() {
       )}
 
       <div className="mt-2.5 flex flex-wrap gap-1.5">
-        {!activated && (
+        {!activated && !needsAttention && (
           <Button className={compactButton} disabled={plan.busy} onClick={actions.activateLicense}>
             {plan.busy ? <LoaderCircle className="animate-spin" /> : <KeyRound />}
             Activate
@@ -159,7 +167,17 @@ function ActivationSection() {
               disabled={plan.busy}
               onClick={actions.deactivateCurrent}
             >
-              Disconnect
+              Sign out
+            </Button>
+          </>
+        )}
+        {needsAttention && (
+          <>
+            <Button className={compactButton} variant="outline" disabled={plan.busy} onClick={actions.validateLicense}>
+              <RefreshCw /> Check again
+            </Button>
+            <Button className={compactButton} variant="destructive" disabled={plan.busy} onClick={actions.deactivateCurrent}>
+              Sign out
             </Button>
           </>
         )}
@@ -169,7 +187,7 @@ function ActivationSection() {
 }
 
 function LicenseUsageSection() {
-  const { plan } = useTextSaver();
+  const { plan, actions } = useTextSaver();
   if (!plan.license || !['active', 'offline_grace', 'refreshing'].includes(plan.license.status)) return null;
   const activeDevices = plan.license.activeDevices ?? 0;
   const maxDevices = plan.license.maxDevices ?? plan.active.maxDevices;
@@ -192,12 +210,83 @@ function LicenseUsageSection() {
           This device · {billing}
         </p>
       </div>
+      <Button className={`${compactButton} mt-2`} variant="outline" disabled={plan.busy} onClick={actions.refreshDevices}>
+        <Monitor /> Manage devices
+      </Button>
+    </section>
+  );
+}
+
+function DeviceManagementSection() {
+  const { plan, actions } = useTextSaver();
+  if (!plan.devicesOpen) return null;
+
+  return (
+    <section className="shrink-0 rounded-lg border border-border bg-card p-3">
+      <SectionHeading
+        icon={<Monitor className="size-4" />}
+        title="Activated devices"
+        detail={plan.deviceLimit ? `${plan.devices.length}/${plan.deviceLimit}` : undefined}
+      />
+      {!plan.devices.length ? (
+        <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+          No device list is available from this session. If all slots are occupied, deactivate a device from an installation that is already signed in, then try this activation again.
+        </p>
+      ) : (
+        <div className="mt-2 grid gap-1.5">
+          {plan.devices.map((device) => (
+            <div key={device.id} className="rounded-md bg-muted/45 px-2.5 py-2">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate text-[12px] font-medium">
+                    {device.deviceName || 'Unnamed device'} {device.isCurrent ? '· This device' : ''}
+                  </p>
+                  <p className="mt-0.5 text-[10px] text-muted-foreground">
+                    {[device.platform, device.lastSeenAt ? `Seen ${new Date(device.lastSeenAt).toLocaleDateString()}` : null]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </p>
+                </div>
+                {!device.isCurrent && (
+                  <div className="flex shrink-0 gap-1">
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      className="size-7"
+                      disabled={plan.busy}
+                      aria-label={`Deactivate ${device.deviceName || 'device'}`}
+                      title="Deactivate (can activate again)"
+                      onClick={() => actions.deactivateDevice(device.id)}
+                    >
+                      <Unplug />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="destructive"
+                      className="size-7"
+                      disabled={plan.busy}
+                      aria-label={`Permanently revoke ${device.deviceName || 'device'}`}
+                      title="Permanently revoke"
+                      onClick={() => actions.revokeDevice(device.id)}
+                    >
+                      <ShieldX />
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
 
 function UpgradePanel() {
+  const { plan } = useTextSaver();
   const configured = isCheckoutConfigured();
+  const renewal = Boolean(plan.license && ['expired', 'subscription_expired', 'subscription_inactive'].includes(plan.license.status));
+  const offlineLocked = plan.license?.status === 'offline_locked';
   const features = [
     '20 local tabs',
     '20k characters per tab',
@@ -233,10 +322,14 @@ function UpgradePanel() {
       </ul>
 
       <div className="mt-auto pt-4">
-        {configured ? (
+        {offlineLocked ? (
+          <Button className="h-9 w-full text-[12px]" disabled>
+            Connect and check again
+          </Button>
+        ) : configured ? (
           <Button asChild className="h-9 w-full text-[12px]">
             <a href={BILLING_CONFIG.plusCheckoutUrl} target="_blank" rel="noreferrer">
-              Buy Plus <ExternalLink />
+              {renewal ? 'Renew Plus' : 'Buy Plus'} <ExternalLink />
             </a>
           </Button>
         ) : (
@@ -360,6 +453,7 @@ export function PlanPanel() {
         <div className="flex shrink-0 flex-col gap-3">
           <ActivationSection />
           <LicenseUsageSection />
+          <DeviceManagementSection />
         </div>
         {plan.active.cloudSync ? <CloudSyncSection /> : <UpgradePanel />}
       </div>

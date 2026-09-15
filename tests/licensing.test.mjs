@@ -59,7 +59,7 @@ test('ten simultaneous unauthorized requests cause one rotating refresh', async 
     if (url.endsWith('/auth/refresh')) {
       refreshes += 1;
       await new Promise((resolve) => setTimeout(resolve, 5));
-      assert.equal(JSON.parse(options.body).refresh_token, 'refresh-old');
+      assert.deepEqual(JSON.parse(options.body), { refresh_token: 'refresh-old' });
       return Response.json({ access_token: 'access-new', refresh_token: 'refresh-new', expires_in: 900 });
     }
     protectedCalls += 1;
@@ -97,6 +97,25 @@ test('a refresh response must rotate the refresh token', async () => {
   assert.equal(area.values[AUTH_SESSION_KEY].tokens, undefined);
 });
 
+test('rotated tokens are saved even when refresh entitlement metadata is invalid', async () => {
+  const area = memoryArea({ [AUTH_SESSION_KEY]: activeSession({
+    tokens: { accessToken: 'expired', refreshToken: 'refresh-old', accessTokenExpiresAt: 0 },
+  }) });
+  const manager = new TokenManager(new SecureStorage(area));
+  globalThis.fetch = async () => Response.json({
+    access_token: 'access-new',
+    refresh_token: 'refresh-new',
+    expires_in: 1800,
+    license: { product: 'wrong-product', plan: 'Plus', status: 'active' },
+    entitlements: ['cloud_sync'],
+  });
+
+  await assert.rejects(() => manager.refresh(), (error) => error.code === 'PRODUCT_MISMATCH');
+  assert.equal(area.values[AUTH_SESSION_KEY].tokens.accessToken, 'access-new');
+  assert.equal(area.values[AUTH_SESSION_KEY].tokens.refreshToken, 'refresh-new');
+  assert.equal(JSON.stringify(area.values).includes('refresh-old'), false);
+});
+
 test('device revocation clears bearer credentials and records a customer-facing state', async () => {
   const area = memoryArea({ [AUTH_SESSION_KEY]: activeSession() });
   const manager = new TokenManager(new SecureStorage(area));
@@ -124,6 +143,17 @@ test('temporary refresh failure enters bounded offline grace without unlocking s
   }), (error) => error.code === 'NETWORK_ERROR');
   assert.equal(area.values[AUTH_SESSION_KEY].status, 'offline_grace');
   assert.ok(area.values[AUTH_SESSION_KEY].offlineGraceUntil > Date.now());
+});
+
+test('offline grace expiry locks Plus but keeps credentials for online recovery', async () => {
+  const area = memoryArea({ [AUTH_SESSION_KEY]: activeSession({
+    status: 'offline_grace',
+    offlineGraceUntil: Date.now() - 1,
+  }) });
+  const auth = new AuthService(new SecureStorage(area), {}, new EntitlementService(), {});
+  const session = await auth.session();
+  assert.equal(session.status, 'offline_locked');
+  assert.equal(session.tokens.refreshToken, 'refresh-old');
 });
 
 test('protected requests send bearer auth and never send a license key', async () => {
@@ -156,6 +186,51 @@ test('a protected endpoint can revoke the device and clear local credentials', a
   }), (error) => error.message === 'This device was deactivated. Activate it again to restore access.');
   assert.equal(area.values[AUTH_SESSION_KEY].status, 'device_revoked');
   assert.equal(area.values[AUTH_SESSION_KEY].tokens, undefined);
+});
+
+test('a definite expired response locks cached entitlements without discarding refresh credentials', async () => {
+  const area = memoryArea({ [AUTH_SESSION_KEY]: activeSession() });
+  const storage = new SecureStorage(area);
+  const client = new ApiClient(new TokenManager(storage), 'https://license.test/api/v1', storage);
+  globalThis.fetch = async () => Response.json({ error: 'license_expired' }, { status: 403 });
+
+  await assert.rejects(() => client.request('/sync/push', {
+    method: 'POST', requiredEntitlement: 'cloud_sync', body: { revision: 0, data: 'ciphertext' },
+  }), (error) => error.code === 'LICENSE_EXPIRED');
+  assert.equal(area.values[AUTH_SESSION_KEY].status, 'expired');
+  assert.deepEqual(area.values[AUTH_SESSION_KEY].entitlements.features, []);
+  assert.equal(area.values[AUTH_SESSION_KEY].tokens.refreshToken, 'refresh-old');
+});
+
+test('session_revoked is definitive and is not retried through refresh', async () => {
+  const area = memoryArea({ [AUTH_SESSION_KEY]: activeSession() });
+  const storage = new SecureStorage(area);
+  const client = new ApiClient(new TokenManager(storage), 'https://license.test/api/v1', storage);
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    return Response.json({ error: 'session_revoked' }, { status: 401 });
+  };
+
+  await assert.rejects(() => client.request('/license'), (error) => error.code === 'SESSION_REVOKED');
+  assert.equal(calls, 1);
+  assert.equal(area.values[AUTH_SESSION_KEY].tokens, undefined);
+});
+
+test('rate-limit responses expose Retry-After for scheduled retries', async () => {
+  const area = memoryArea({ [AUTH_SESSION_KEY]: activeSession() });
+  const storage = new SecureStorage(area);
+  const client = new ApiClient(new TokenManager(storage), 'https://license.test/api/v1', storage);
+  globalThis.fetch = async () => Response.json(
+    { error: 'too_many_attempts' },
+    { status: 429, headers: { 'Retry-After': '120' } },
+  );
+
+  await assert.rejects(() => client.request('/license'), (error) => {
+    assert.equal(error.code, 'TOO_MANY_ATTEMPTS');
+    assert.equal(error.details.retryAfterMs, 120_000);
+    return true;
+  });
 });
 
 test('cached entitlements are only a local preflight for premium API routes', async () => {
@@ -195,25 +270,48 @@ test('the installation UUID is generated once and reused', async () => {
   assert.equal(second.name, 'Chrome on macOS');
 });
 
-test('deactivation releases the server device before clearing local credentials', async () => {
+test('sign out releases the server device before clearing local credentials', async () => {
   const area = memoryArea({ [AUTH_SESSION_KEY]: activeSession() });
   const storage = new SecureStorage(area);
   let request;
   const api = { request: async (path, options) => { request = { path, options }; return { deactivated: true }; } };
   const auth = new AuthService(storage, {}, new EntitlementService(), api);
   await auth.deactivate();
-  assert.equal(request.path, '/licenses/deactivate');
-  assert.deepEqual(request.options.body, { product: 'text-saver', device_uuid: 'device-uuid' });
+  assert.equal(request.path, '/auth/logout');
+  assert.equal(request.options.body, undefined);
   assert.equal(area.values[AUTH_SESSION_KEY], undefined);
 });
 
-test('expired subscription metadata cannot create an active cached entitlement', () => {
+test('license validation uses GET /license and backend entitlement keys', async () => {
+  const area = memoryArea({ [AUTH_SESSION_KEY]: activeSession() });
+  const storage = new SecureStorage(area);
+  let request;
+  const api = {
+    request: async (path, options) => {
+      request = { path, options };
+      return {
+        license: { product: 'text-saver', plan: 'Plus Lifetime', status: 'active', billing_type: 'lifetime' },
+        entitlements: ['cloud_sync'],
+        device: { id: 'server-device-id', device_name: 'Chrome on macOS' },
+      };
+    },
+  };
+  const auth = new AuthService(storage, {}, new EntitlementService(), api);
+  const session = await auth.validate(true);
+  assert.equal(request.path, '/license');
+  assert.deepEqual(request.options, { method: 'GET' });
+  assert.deepEqual(session.entitlements.features, ['cloud_sync']);
+});
+
+test('expired license metadata is retained for display but has no paid entitlements', () => {
   const entitlements = new EntitlementService();
-  assert.throws(() => entitlements.fromPayload({
-    valid: true,
+  const result = entitlements.fromPayload({
     license: {
-      product: 'text-saver', plan: 'plus', status: 'active', billing_type: 'subscription',
+      product: 'text-saver', plan: 'Plus Monthly', status: 'expired', billing_type: 'subscription',
       expires_at: '2020-01-01T00:00:00Z',
     },
-  }), (error) => error.code === 'SUBSCRIPTION_EXPIRED');
+    entitlements: [],
+  });
+  assert.equal(result.licenseStatus, 'expired');
+  assert.deepEqual(result.features, []);
 });

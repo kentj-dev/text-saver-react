@@ -11,8 +11,24 @@ import {
     scheduleCloudSync,
     syncNow
 } from './lib/cloud-sync.js';
-import { LICENSE_KEY, effectivePlanId, getInstallation, getStoredLicense, validateLicense } from './lib/licensing.js';
+import {
+    LICENSE_KEY,
+    LICENSING_MESSAGE,
+    effectivePlanId,
+    getInstallation,
+    getStoredLicense,
+    validateLicense
+} from './lib/licensing.js';
+import { handleLicensingMessage, runLicensingCommand } from './auth/licensingService.ts';
 import { getPlanLimits, serializedStateBytes } from './lib/plans.js';
+
+globalThis.__TEXT_SAVER_LICENSING_SERVICE__ = runLicensingCommand;
+
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message?.type !== LICENSING_MESSAGE) return undefined;
+    void handleLicensingMessage(message).then(sendResponse);
+    return true;
+});
 
 chrome.runtime.onInstalled.addListener(async () => {
     try {
@@ -64,7 +80,10 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
         } catch (error) {
             console.warn('Text Saver background sync failed.', error.message);
             if (error?.isTemporary) {
-                await deferCloudSync('Offline or server unavailable · changes are safe locally and will retry.');
+                await deferCloudSync(
+                    'Offline or server unavailable · changes are safe locally and will retry.',
+                    typeof error.details?.retryAfterMs === 'number' ? error.details.retryAfterMs : undefined
+                );
             }
         }
         return;
@@ -86,7 +105,10 @@ chrome.runtime.onStartup.addListener(async () => {
     } catch (error) {
         console.warn('Text Saver startup validation failed.', error.message);
         if (error?.isTemporary) {
-            await deferCloudSync('Offline or server unavailable · changes are safe locally and will retry.');
+            await deferCloudSync(
+                'Offline or server unavailable · changes are safe locally and will retry.',
+                typeof error.details?.retryAfterMs === 'number' ? error.details.retryAfterMs : undefined
+            );
         }
     }
 });
@@ -106,5 +128,14 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
         await validateLicense({ force: true });
     } catch (error) {
         console.warn('Text Saver scheduled license validation failed.', error.message);
+        if (error?.isTemporary) {
+            const retryDelay = typeof error.details?.retryAfterMs === 'number'
+                ? error.details.retryAfterMs
+                : 15 * 60 * 1000;
+            await chrome.alarms.create('text-saver-license-validation', {
+                when: Date.now() + retryDelay,
+                periodInMinutes: 12 * 60
+            });
+        }
     }
 });

@@ -37,12 +37,14 @@ export function parseTokenSet(payload: Record<string, unknown>, previousRefreshT
     throw new ApiError('The server did not rotate the refresh token.', 'ROTATION_REQUIRED', 401);
   }
   const expiresIn = Number(source.expires_in);
+  const refreshExpiresIn = Number((source as TokenPayload & { refresh_token_expires_in?: number }).refresh_token_expires_in);
   return {
     accessToken,
     refreshToken,
     accessTokenExpiresAt: timestamp(source.access_token_expires_at)
       || Date.now() + (Number.isFinite(expiresIn) && expiresIn > 0 ? expiresIn * 1000 : 15 * 60 * 1000),
-    refreshTokenExpiresAt: timestamp(source.refresh_token_expires_at),
+    refreshTokenExpiresAt: timestamp(source.refresh_token_expires_at)
+      || (Number.isFinite(refreshExpiresIn) && refreshExpiresIn > 0 ? Date.now() + refreshExpiresIn * 1000 : undefined),
   };
 }
 
@@ -88,8 +90,8 @@ export class TokenManager {
     const execute = async () => {
       const current = await this.storage.getSession();
       if (!current?.tokens) throw new ApiError('Activate Plus to continue.', 'AUTH_REQUIRED', 401);
-      // Web Locks coalesces refreshes across the popup and MV3 service worker.
-      // The second context observes the already-rotated token and skips its call.
+      // The service worker owns refreshes. A Web Lock also protects tests/dev
+      // reloads where two worker instances can briefly overlap.
       if (current.tokens.refreshToken !== expected.tokens?.refreshToken) return current.tokens;
       return this.performRefresh(current);
     };
@@ -110,8 +112,6 @@ export class TokenManager {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({
-          product: BILLING_CONFIG.productSlug,
-          device_uuid: session.deviceUuid,
           refresh_token: session.tokens.refreshToken,
         }),
       });
@@ -123,7 +123,7 @@ export class TokenManager {
 
     const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
     if (!response.ok) {
-      const error = errorFromResponse(response.status, payload);
+      const error = errorFromResponse(response.status, payload, response.headers.get('Retry-After'));
       await this.recordRefreshFailure(session, error);
       throw error;
     }
@@ -142,24 +142,38 @@ export class TokenManager {
     if (!current) throw new ApiError('Activate Plus to continue.', 'AUTH_REQUIRED', 401);
     if (!current.tokens) throw new ApiError('Activate Plus to continue.', 'AUTH_REQUIRED', 401);
     if (current.tokens?.refreshToken !== session.tokens.refreshToken) return current.tokens;
-    let entitlements = current.entitlements;
+    // Persist the rotated pair before parsing any accompanying metadata. The
+    // old refresh token is single-use and must never be restored on a later
+    // parsing or network failure.
+    const rotatedSession: AuthSession = {
+      ...current,
+      status: 'active',
+      tokens,
+      errorCode: undefined,
+    };
+    await this.storage.setSession(rotatedSession);
+
+    let entitlements = rotatedSession.entitlements;
     try {
       if (payload.entitlements || payload.license) entitlements = entitlementService.fromPayload(payload);
     } catch (unknownError) {
       const error = unknownError instanceof ApiError
         ? unknownError
         : new ApiError('The entitlement response was invalid.', 'BACKEND_CONTRACT_ERROR', 502);
-      await this.recordRefreshFailure(session, error);
+      await this.storage.setSession({
+        ...rotatedSession,
+        status: entitlementService.isOfflineGraceAvailable(rotatedSession) ? 'offline_grace' : 'offline_locked',
+        errorCode: error.code,
+      });
       throw error;
     }
     const now = Date.now();
     await this.storage.setSession({
-      ...current,
-      status: 'active',
-      tokens, // Atomic replacement: the rotated refresh token supersedes the old one.
+      ...rotatedSession,
+      status: entitlements?.licenseStatus?.toLowerCase() === 'expired' ? 'expired' : 'active',
       entitlements,
       lastValidatedAt: now,
-      offlineGraceUntil: entitlements ? entitlementService.offlineGraceUntil(entitlements, now) : current.offlineGraceUntil,
+      offlineGraceUntil: entitlements ? entitlementService.offlineGraceUntil(entitlements, now) : rotatedSession.offlineGraceUntil,
       errorCode: undefined,
     });
     return tokens;
@@ -171,7 +185,7 @@ export class TokenManager {
       return;
     }
     if (error.isTemporary) {
-      await this.storage.setSession({ ...session, status: 'expired', errorCode: error.code });
+      await this.storage.setSession({ ...session, status: 'offline_locked', errorCode: error.code });
       return;
     }
     await this.storage.setSession({

@@ -19,10 +19,13 @@ import {
   LicenseApiError,
   activateLicense,
   currentPlan,
+  deactivateDevice as deactivateLicenseDevice,
   deactivateInstallation,
   effectivePlanId,
   getInstallation,
   getStoredLicense,
+  listDevices,
+  revokeDevice as revokeLicenseDevice,
   validateLicense,
 } from '@/lib/licensing.js';
 import { getPlanLimits, serializedStateBytes } from '@/lib/plans.js';
@@ -54,6 +57,7 @@ import {
 } from '@/lib/storage.js';
 import type {
   License,
+  LicenseDevice,
   Plan,
   SaverState,
   SaverTab,
@@ -92,6 +96,9 @@ export function TextSaverProvider({ children }: { children: ReactNode }) {
   const [licenseInput, setLicenseInput] = useState('');
   const [deviceName, setDeviceName] = useState('');
   const [planBusy, setPlanBusy] = useState(false);
+  const [devices, setDevices] = useState<LicenseDevice[]>([]);
+  const [deviceLimit, setDeviceLimit] = useState(0);
+  const [devicesOpen, setDevicesOpen] = useState(false);
   const { promptConfig, ask, resolvePrompt } = usePrompt();
   const [contextMenu, setContextMenu] = useState<TabContextPosition | null>(null);
   const startGuide = useProductTour();
@@ -277,22 +284,30 @@ export function TextSaverProvider({ children }: { children: ReactNode }) {
         const storedTheme = await chrome.storage.local.get(THEME_KEY);
         if (active) setTheme(storedTheme[THEME_KEY] === 'light' ? 'light' : 'dark');
         const nextLicense = await refreshEntitlement(true);
-        const initialState = (await getOrMigrateState()) as SaverState;
+        let initialState = (await getOrMigrateState()) as SaverState;
+        const settings = (await getSyncSettings()) as SyncSettings | null;
+        if (effectivePlanId(nextLicense) === 'plus' && settings?.enabled && navigator.onLine) {
+          try {
+            initialState = (await synchronizeNow()) as SaverState || initialState;
+          } catch (error) {
+            if (error instanceof LicenseApiError && error.isTemporary) {
+              await deferCloudSync('Offline or server unavailable · changes are safe locally and will retry.');
+            } else {
+              setLicenseError((error as Error).message);
+            }
+          }
+        }
         if (!active) return;
         stateRef.current = initialState;
         setState(initialState);
         await displayState(initialState);
         const installation = (await getInstallation()) as { name: string };
         setDeviceName(nextLicense?.deviceName || installation.name);
-        const settings = (await getSyncSettings()) as SyncSettings | null;
-        setSyncSettings(settings);
+        setSyncSettings((await getSyncSettings()) as SyncSettings | null);
         const seen = await chrome.storage.local.get(GUIDE_SEEN_KEY);
         if (!seen[GUIDE_SEEN_KEY]) {
           await chrome.storage.local.set({ [GUIDE_SEEN_KEY]: true });
           startGuide();
-        }
-        if (effectivePlanId(nextLicense) === 'plus' && settings?.enabled) {
-          queueCloudSync(0);
         }
       } catch (error) {
         console.error('Text Saver could not load saved data.', error);
@@ -835,17 +850,28 @@ export function TextSaverProvider({ children }: { children: ReactNode }) {
     setPlanBusy(true);
     setLicenseError('');
     const oldLicense = (await getStoredLicense()) as License | null;
+    // Keep the customer key only long enough to send the one activation call.
+    setLicenseInput('');
     try {
       const nextLicense = (await activateLicense(key, deviceName)) as License;
       if (oldLicense) {
         await disableCloudSync();
       }
-      setLicenseInput('');
       await refreshPlan();
       showToast(`${currentPlan(nextLicense).name} activated`);
     } catch (error) {
       const typed = error as InstanceType<typeof LicenseApiError>;
       setLicenseError(error instanceof LicenseApiError ? typed.message : 'Activation failed. Try again.');
+      if (error instanceof LicenseApiError && ['DEVICE_LIMIT_REACHED', 'DEVICE_LIMIT_EXCEEDED', 'LICENSE_DEVICE_LIMIT_EXCEEDED'].includes(typed.code)) {
+        setDevicesOpen(true);
+        try {
+          const result = await listDevices() as { devices: LicenseDevice[]; maxDevices: number };
+          setDevices(result.devices);
+          setDeviceLimit(result.maxDevices);
+        } catch {
+          setDevices([]);
+        }
+      }
     } finally {
       setPlanBusy(false);
     }
@@ -871,19 +897,100 @@ export function TextSaverProvider({ children }: { children: ReactNode }) {
   async function deactivateCurrent() {
     if (!license) return;
     const confirmed = await ask({
-      title: 'Deactivate this device?',
-      message: 'This frees one activation. Local notes remain available on the Free plan.',
-      confirmLabel: 'Deactivate',
+      title: 'Sign out this device?',
+      message: 'This frees its license slot. Local notes remain available on the Free plan.',
+      confirmLabel: 'Sign out',
     });
     if (!confirmed) return;
     setPlanBusy(true);
     try {
       await deactivateInstallation(license);
       await disableCloudSync();
+      setDevices([]);
+      setDevicesOpen(false);
       await refreshPlan();
+      showToast('Signed out');
+    } catch (error) {
+      setLicenseError((error as Error).message);
+    } finally {
+      setPlanBusy(false);
+    }
+  }
+
+  async function refreshDevices() {
+    setPlanBusy(true);
+    setLicenseError('');
+    setDevicesOpen(true);
+    try {
+      const result = await listDevices() as { devices: LicenseDevice[]; maxDevices: number };
+      setDevices(result.devices);
+      setDeviceLimit(result.maxDevices);
+    } catch (error) {
+      setLicenseError((error as Error).message);
+    } finally {
+      setPlanBusy(false);
+    }
+  }
+
+  async function deactivateDevice(id: string) {
+    const target = devices.find((device) => device.id === id);
+    if (!target || target.isCurrent) return;
+    const confirmed = await ask({
+      title: 'Deactivate this device?',
+      message: `${target.deviceName || 'This device'} can be activated again later.`,
+      confirmLabel: 'Deactivate',
+    });
+    if (!confirmed) return;
+    setPlanBusy(true);
+    try {
+      await deactivateLicenseDevice(id);
+      const result = await listDevices() as { devices: LicenseDevice[]; maxDevices: number };
+      setDevices(result.devices);
+      setDeviceLimit(result.maxDevices);
       showToast('Device deactivated');
     } catch (error) {
       setLicenseError((error as Error).message);
+      if (error instanceof LicenseApiError && error.code === 'NOT_FOUND') {
+        try {
+          const result = await listDevices() as { devices: LicenseDevice[]; maxDevices: number };
+          setDevices(result.devices);
+          setDeviceLimit(result.maxDevices);
+        } catch {
+          // Keep the original, more useful not-found message.
+        }
+      }
+    } finally {
+      setPlanBusy(false);
+    }
+  }
+
+  async function revokeDevice(id: string) {
+    const target = devices.find((device) => device.id === id);
+    if (!target || target.isCurrent) return;
+    const confirmed = await ask({
+      title: 'Permanently revoke this device?',
+      message: `${target.deviceName || 'This installation'} will never be able to activate this license again.`,
+      confirmLabel: 'Revoke permanently',
+    });
+    if (!confirmed) return;
+    setPlanBusy(true);
+    try {
+      await revokeLicenseDevice(id);
+      const result = await listDevices() as { devices: LicenseDevice[]; maxDevices: number };
+      setDevices(result.devices);
+      setDeviceLimit(result.maxDevices);
+      showToast('Device revoked');
+    } catch (error) {
+      setLicenseError((error as Error).message);
+      if (error instanceof LicenseApiError && error.code === 'NOT_FOUND') {
+        try {
+          const result = await listDevices() as { devices: LicenseDevice[]; maxDevices: number };
+          setDevices(result.devices);
+          setDeviceLimit(result.maxDevices);
+        } catch {
+          // Keep the original, more useful not-found message.
+        }
+      }
     } finally {
       setPlanBusy(false);
     }
@@ -993,7 +1100,10 @@ export function TextSaverProvider({ children }: { children: ReactNode }) {
       setLicenseError(message);
       if (isRetryableSyncError(error)) {
         cloudSyncPending.current = true;
-        await deferCloudSync(offlineSyncMessage());
+        const retryAfterMs = error instanceof LicenseApiError && typeof error.details?.retryAfterMs === 'number'
+          ? error.details.retryAfterMs
+          : undefined;
+        await deferCloudSync(offlineSyncMessage(), retryAfterMs);
         if (notify) showToast('Could not reach the cloud · changes are saved locally and will retry');
       } else if (notify) {
         showToast(message);
@@ -1123,6 +1233,9 @@ export function TextSaverProvider({ children }: { children: ReactNode }) {
         licenseError,
         busy: planBusy,
         syncSettings,
+        devices,
+        deviceLimit,
+        devicesOpen,
       },
       ui: { theme, saveStatus, contextMenu, promptConfig, toast },
       actions: {
@@ -1150,6 +1263,9 @@ export function TextSaverProvider({ children }: { children: ReactNode }) {
         activateLicense: handleActivation,
         validateLicense: handleValidation,
         deactivateCurrent,
+        refreshDevices,
+        deactivateDevice,
+        revokeDevice,
         setupSync,
         syncNow,
         turnOffSync,

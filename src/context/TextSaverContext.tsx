@@ -1,6 +1,7 @@
 import { createContext, useContext, type RefObject } from 'react';
 import type {
   License,
+  LicenseDevice,
   Plan,
   PromptConfig,
   SaverState,
@@ -37,6 +38,9 @@ export type TextSaverContextValue = {
     licenseError: string;
     busy: boolean;
     syncSettings: SyncSettings | null;
+    devices: LicenseDevice[];
+    deviceLimit: number;
+    devicesOpen: boolean;
   };
   ui: {
     theme: 'dark' | 'light';
@@ -70,6 +74,9 @@ export type TextSaverContextValue = {
     activateLicense: () => Promise<void>;
     validateLicense: () => Promise<void>;
     deactivateCurrent: () => Promise<void>;
+    refreshDevices: () => Promise<void>;
+    deactivateDevice: (id: string) => Promise<void>;
+    revokeDevice: (id: string) => Promise<void>;
     setupSync: (reset?: boolean) => Promise<void>;
     syncNow: () => Promise<void>;
     turnOffSync: () => Promise<void>;

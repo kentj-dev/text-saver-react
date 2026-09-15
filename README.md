@@ -47,20 +47,23 @@ The extension is configured for:
 - Product slug: `text-saver`
 - Host permission: `https://apps.hamiken.com/*`
 
-Activation sends the customer-entered license key once with the product, persisted installation UUID, and friendly device name. A successful response must return a short-lived access token, a rotating refresh token, and entitlements. The raw license key is then discarded and is never stored or sent again.
+Activation sends the customer-entered license key once with the product, persisted installation ID, friendly device name, platform, and app version. A successful response must return a 30-minute access token, a rotating 30-day refresh token, license metadata, and entitlements. The raw license key is then discarded and is never stored or sent again.
 
-Authenticated requests use `Authorization: Bearer <access_token>`. The centralized API client refreshes expired access tokens through `/auth/refresh`, atomically replaces both tokens, coalesces concurrent refresh attempts, retries a request once, and moves revoked or expired sessions back to an activation state. The extension calls:
+All network authentication runs in the Manifest V3 service worker. Popup code uses extension messages; it never handles bearer or refresh tokens. The centralized API client refreshes expired access tokens through `/auth/refresh`, persists the newly rotated pair before doing anything else, coalesces concurrent refresh attempts, and retries only an expired/invalid access-token request once. The extension calls:
 
 - `/licenses/activate`
-- `/licenses/validate`
-- `/licenses/deactivate`
 - `/auth/refresh`
+- `/auth/logout`
+- `/license`
+- `/devices`
+- `/devices/{id}`
+- `/devices/{id}/revoke`
 - `/sync/pull`
 - `/sync/push`
 
 Device credentials are stored in `chrome.storage.local`. This protects them from ordinary websites but not from a user who controls the extension or browser profile. Tokens must therefore be revocable and the backend must validate the license, device, product, subscription, and required entitlement for every premium server operation. Cached entitlements only control local UI and the bounded three-day offline experience.
 
-The licensing implementation is separated into `src/auth`, `src/api`, and `src/storage`. No Creem API key, private signing key, database secret, or webhook secret may be placed in this repository. `DeviceManager` includes a reserved public-key field so a future version can register a device-generated public key without changing the customer-facing activation flow.
+The licensing implementation is separated into `src/auth`, `src/api`, and `src/storage`. UI gates use the returned entitlement keys—currently `cloud_sync`—rather than trusting a plan name. No Creem API key, private signing key, database secret, or webhook secret may be placed in this repository. `DeviceManager` includes a reserved public-key field so a future version can register a device-generated public key without changing the customer-facing activation flow.
 
 The checkout URL in `src/lib/config.js` currently uses a Creem test payment link. Replace it with the live product payment link before publishing.
 

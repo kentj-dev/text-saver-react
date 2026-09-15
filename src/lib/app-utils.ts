@@ -32,10 +32,19 @@ export function licenseStatusText(license: License | null) {
   if (license.status === 'refreshing') return 'Securely renewing this device session…';
   if (license.status === 'device_revoked') return 'This device was deactivated. Your local notes remain available.';
   if (license.status === 'revoked') return 'This license was revoked. Your local notes remain available.';
+  if (license.status === 'offline_locked') {
+    return 'Plus could not be revalidated. Connect to the internet and check again.';
+  }
+  if (license.status === 'subscription_inactive') {
+    return 'This subscription is inactive. Update billing to restore Plus.';
+  }
   if (license.status === 'subscription_expired' || license.status === 'expired') {
     return 'This plan has expired. Your local notes remain available.';
   }
-  if (license.status === 'inactive' && ['TOKEN_FAMILY_REVOKED', 'REFRESH_TOKEN_REVOKED', 'INVALID_REFRESH_TOKEN'].includes(license.validationError || '')) {
+  if (license.status === 'inactive' && [
+    'TOKEN_FAMILY_REVOKED', 'REFRESH_TOKEN_REVOKED', 'INVALID_REFRESH_TOKEN',
+    'REFRESH_TOKEN_REUSED', 'SESSION_REVOKED', 'INVALID_ACCESS_TOKEN',
+  ].includes(license.validationError || '')) {
     return 'Your session has expired. Activate this device again.';
   }
   if (license.status !== 'active') return 'No license is active on this installation.';

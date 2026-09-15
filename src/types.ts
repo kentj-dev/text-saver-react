@@ -49,13 +49,25 @@ export type License = {
     | 'active'
     | 'refreshing'
     | 'offline_grace'
+    | 'offline_locked'
     | 'expired'
     | 'revoked'
     | 'device_revoked'
+    | 'subscription_inactive'
     | 'subscription_expired';
   lastValidatedAt?: number;
   offlineValidUntil?: number;
   validationError?: string;
+};
+
+export type LicenseDevice = {
+  id: string;
+  deviceName: string | null;
+  platform: string | null;
+  appVersion: string | null;
+  activatedAt: string;
+  lastSeenAt: string | null;
+  isCurrent?: boolean;
 };
 
 export type SyncSettings = {

@@ -4,9 +4,11 @@ export type AuthStatus =
   | 'active'
   | 'refreshing'
   | 'offline_grace'
+  | 'offline_locked'
   | 'expired'
   | 'revoked'
   | 'device_revoked'
+  | 'subscription_inactive'
   | 'subscription_expired';
 
 export type Entitlements = {
@@ -23,8 +25,20 @@ export type Entitlements = {
 export type DeviceRegistration = {
   deviceId?: string;
   deviceName: string;
+  platform?: string;
+  appVersion?: string;
   activatedAt?: string;
   lastSeenAt?: string;
+};
+
+export type LicenseDevice = {
+  id: string;
+  deviceName: string | null;
+  platform: string | null;
+  appVersion: string | null;
+  activatedAt: string;
+  lastSeenAt: string | null;
+  isCurrent?: boolean;
 };
 
 export type TokenSet = {

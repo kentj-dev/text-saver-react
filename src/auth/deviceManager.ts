@@ -5,6 +5,7 @@ export const INSTALLATION_KEY = 'text_saver_installation';
 export type Installation = {
   id: string;
   name: string;
+  platform: string;
   createdAt: string;
   publicKey?: string;
 };
@@ -27,12 +28,19 @@ export class DeviceManager {
   async getOrCreate(): Promise<Installation> {
     const stored = await chrome.storage.local.get(INSTALLATION_KEY);
     const existing = stored[INSTALLATION_KEY] as Installation | undefined;
-    if (existing?.id && existing?.name) return structuredClone(existing);
+    if (existing?.id && existing?.name) {
+      if (existing.platform) return structuredClone(existing);
+      const platform = await chrome.runtime.getPlatformInfo().catch(() => ({ os: 'unknown' as const }));
+      const updated = { ...existing, platform: String(platform.os || 'unknown') };
+      await chrome.storage.local.set({ [INSTALLATION_KEY]: updated });
+      return structuredClone(updated);
+    }
 
     const platform = await chrome.runtime.getPlatformInfo().catch(() => ({ os: 'unknown' as const }));
     const installation: Installation = {
       id: uuid(),
       name: `Chrome on ${friendlyPlatform(platform.os)}`,
+      platform: String(platform.os || 'unknown'),
       createdAt: new Date().toISOString(),
     };
     await chrome.storage.local.set({ [INSTALLATION_KEY]: installation });
@@ -49,10 +57,12 @@ export class DeviceManager {
   activationPayload(installation: Installation) {
     return {
       product: BILLING_CONFIG.productSlug,
-      device_uuid: installation.id,
+      device_id: installation.id,
       device_name: installation.name,
+      platform: installation.platform,
+      app_version: chrome.runtime.getManifest().version,
       // Reserved for a future non-exportable device key registration flow.
-      ...(installation.publicKey ? { device_public_key: installation.publicKey } : {}),
+      ...(installation.publicKey ? { public_key: installation.publicKey } : {}),
     };
   }
 }

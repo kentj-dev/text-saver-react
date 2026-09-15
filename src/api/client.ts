@@ -56,18 +56,44 @@ export class ApiClient {
       throw new ApiError('The server could not be reached.', 'NETWORK_ERROR', 0);
     }
 
+    if (response.status === 204) return undefined as T;
+
     const payload = await response.json().catch(() => ({}));
-    if (response.status === 401 && options.authenticated && options.retryAfterRefresh) {
+    const responseError = response.ok ? null : errorFromResponse(response.status, payload, response.headers.get('Retry-After'));
+    if (
+      response.status === 401
+      && options.authenticated
+      && options.retryAfterRefresh
+      && responseError
+      && ['ACCESS_TOKEN_EXPIRED', 'INVALID_ACCESS_TOKEN'].includes(responseError.code)
+    ) {
       await this.tokens.refreshAfterUnauthorized(accessToken || '');
       return this.perform<T>(path, { ...options, retryAfterRefresh: false });
     }
     if (!response.ok) {
-      const error = errorFromResponse(response.status, payload);
-      if (options.authenticated && error.isAuthenticationFailure) {
+      const error = responseError!;
+      if (options.authenticated && (error.status === 401 || error.status === 403)) {
         const session = await this.storage.getSession();
         if (session) {
+          const entitlement = typeof error.details?.entitlement === 'string' ? error.details.entitlement : undefined;
+          const losesPaidAccess = [
+            'LICENSE_EXPIRED', 'LICENSE_REVOKED', 'SUBSCRIPTION_INACTIVE',
+            'SUBSCRIPTION_EXPIRED', 'DEVICE_REVOKED', 'DEVICE_NOT_ACTIVATED',
+            'PRODUCT_MISMATCH',
+          ].includes(error.code);
           await this.storage.setSession({
-            ...session, status: statusForError(error), tokens: undefined, errorCode: error.code,
+            ...session,
+            status: losesPaidAccess || error.clearsCredentials ? statusForError(error) : session.status,
+            tokens: error.clearsCredentials ? undefined : session.tokens,
+            entitlements: session.entitlements ? {
+              ...session.entitlements,
+              features: losesPaidAccess
+                ? []
+                : entitlement
+                  ? session.entitlements.features.filter((feature) => feature !== entitlement)
+                  : session.entitlements.features,
+            } : undefined,
+            errorCode: error.code,
           });
         }
       }

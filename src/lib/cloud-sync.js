@@ -396,7 +396,7 @@ export async function syncNow({ retry = true } = {}) {
     });
     return mergedState;
   } catch (error) {
-    if (retry && error.status === 409) return syncNow({ retry: false });
+    if (retry && error.code === 'SYNC_CONFLICT') return syncNow({ retry: false });
     await saveSyncSettings({ ...settings, status: 'error', error: error.message });
     throw error;
   }

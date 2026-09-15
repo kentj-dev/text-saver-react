@@ -11,7 +11,7 @@ import {
   mergeStates,
   mergeSyncDocuments,
 } from '../src/lib/cloud-sync.js';
-import { activateLicense, effectivePlanId } from '../src/lib/licensing.js';
+import { activateLicense, effectivePlanId, validateLicense } from '../src/lib/licensing.js';
 import { getPlanLimits } from '../src/lib/plans.js';
 import { decryptText, encryptText, isValidState } from '../src/lib/storage.js';
 import { AUTH_SESSION_KEY, LEGACY_LICENSE_KEY } from '../src/storage/secureStorage.ts';
@@ -34,11 +34,11 @@ test('React build keeps the published plan limits and entitlement rules', () => 
   assert.equal(getPlanLimits('plus').maxSyncedTabs, 5);
   assert.equal(getPlanLimits('plus').maxDevices, 2);
   assert.equal(
-    effectivePlanId({ planId: 'plus', status: 'offline_grace', offlineValidUntil: Date.now() + 1000 }),
+    effectivePlanId({ features: ['cloud_sync'], status: 'offline_grace', offlineValidUntil: Date.now() + 1000 }),
     'plus',
   );
-  assert.equal(effectivePlanId({ planId: 'pro', status: 'active' }), 'plus');
-  assert.equal(effectivePlanId({ planId: 'pro', status: 'invalid' }), 'free');
+  assert.equal(effectivePlanId({ plan: 'Any backend plan name', features: ['cloud_sync'], status: 'active' }), 'plus');
+  assert.equal(effectivePlanId({ plan: 'Plus', features: [], status: 'active' }), 'free');
 });
 
 test('cloud documents contain only explicitly selected tabs', () => {
@@ -147,8 +147,8 @@ test('activation stores device tokens but permanently discards the raw license k
       JSON.stringify({
         access_token: 'short-lived-access-token',
         refresh_token: 'rotating-refresh-token',
-        expires_in: 900,
-        activated: true,
+        expires_in: 1800,
+        refresh_token_expires_in: 2_592_000,
         license: {
           product: 'text-saver',
           plan: 'Plus',
@@ -158,9 +158,12 @@ test('activation stores device tokens but permanently discards the raw license k
           max_devices: 2,
           active_devices: 1,
         },
-        activation: {
-          device_id: request.body.device_uuid,
+        entitlements: ['cloud_sync'],
+        device: {
+          id: 'server-device-id',
           device_name: 'My Mac',
+          platform: 'mac',
+          app_version: '6.0.0',
           activated_at: '2026-09-14T00:00:00Z',
           last_seen_at: '2026-09-14T00:00:00Z',
         },
@@ -174,15 +177,36 @@ test('activation stores device tokens but permanently discards the raw license k
   assert.equal(request.options.method, 'POST');
   assert.equal(request.body.product, 'text-saver');
   assert.equal(request.body.license_key, 'license-key');
-  assert.equal(request.body.device_uuid, values.text_saver_installation.id);
+  assert.equal(request.body.device_id, values.text_saver_installation.id);
   assert.equal(request.body.device_name, 'My Mac');
-  assert.equal(typeof request.body.device_uuid, 'string');
+  assert.equal(request.body.platform, 'mac');
+  assert.equal(request.body.app_version, '6.0.0');
+  assert.equal(typeof request.body.device_id, 'string');
   assert.equal(license.status, 'active');
   assert.equal(values[AUTH_SESSION_KEY].tokens.accessToken, 'short-lived-access-token');
   assert.equal(values[AUTH_SESSION_KEY].tokens.refreshToken, 'rotating-refresh-token');
   assert.equal(values[AUTH_SESSION_KEY].licenseKey, undefined);
   assert.equal(values[LEGACY_LICENSE_KEY], undefined);
   assert.equal(JSON.stringify(values).includes('license-key'), false);
+});
+
+test('popup licensing calls are delegated to the service worker', async () => {
+  let message;
+  globalThis.chrome = {
+    runtime: {
+      sendMessage: async (value) => {
+        message = value;
+        return { ok: true, result: { status: 'active', features: ['cloud_sync'] } };
+      },
+    },
+  };
+  globalThis.fetch = async () => { throw new Error('popup must not fetch licensing routes'); };
+
+  const result = await validateLicense({ force: true });
+  assert.equal(message.type, 'text-saver:licensing');
+  assert.equal(message.action, 'validate');
+  assert.deepEqual(message.payload, { force: true });
+  assert.equal(result.status, 'active');
 });
 
 test('React build accepts the existing version-two storage schema', () => {

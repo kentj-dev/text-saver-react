@@ -37,15 +37,12 @@ export class EntitlementService {
       throw new ApiError(customerMessage('PRODUCT_MISMATCH'), 'PRODUCT_MISMATCH', 403);
     }
 
-    const plan = String(raw.plan || raw.plan_id || DEFAULT_PLAN_ID).toLowerCase();
+    const plan = String(raw.plan || raw.plan_id || DEFAULT_PLAN_ID);
     const features = strings(raw.features ?? raw.feature_flags ?? payload.entitlements);
-    // Older Plus responses may omit the feature list. The value is only a UI
-    // cache; protected endpoints still enforce the entitlement on the server.
-    if (['plus', 'pro'].includes(plan) && !features.includes('cloud_sync')) features.push('cloud_sync');
 
     const result: Entitlements = {
       product,
-      plan: plan === 'pro' ? 'plus' : plan,
+      plan,
       features,
       licenseStatus: typeof raw.status === 'string' ? raw.status : undefined,
       billingType: raw.billing_type === 'subscription' ? 'subscription' : raw.billing_type === 'lifetime' ? 'lifetime' : undefined,
@@ -54,13 +51,6 @@ export class EntitlementService {
       activeDevices: Number.isFinite(Number(raw.active_devices)) ? Number(raw.active_devices) : undefined,
     };
     if (payload.valid === false) throw new ApiError(customerMessage('INVALID_LICENSE'), 'INVALID_LICENSE', 403);
-    const status = result.licenseStatus?.toLowerCase();
-    if (status === 'revoked') throw new ApiError(customerMessage('LICENSE_REVOKED'), 'LICENSE_REVOKED', 403);
-    if (status === 'expired') throw new ApiError(customerMessage('LICENSE_EXPIRED'), 'LICENSE_EXPIRED', 403);
-    if (result.expiresAt && Date.parse(result.expiresAt) <= Date.now()) {
-      const code = result.billingType === 'subscription' ? 'SUBSCRIPTION_EXPIRED' : 'LICENSE_EXPIRED';
-      throw new ApiError(customerMessage(code), code, 403);
-    }
     return result;
   }
 
@@ -87,7 +77,7 @@ export class EntitlementService {
   }
 
   effectivePlanId(session: AuthSession | null, now = Date.now()): string {
-    if (!session?.entitlements || !['plus', 'pro'].includes(session.entitlements.plan)) return DEFAULT_PLAN_ID;
+    if (!session?.entitlements?.features.includes('cloud_sync')) return DEFAULT_PLAN_ID;
     if (session.status === 'active' || session.status === 'refreshing') return 'plus';
     if (session.status === 'offline_grace' && this.isOfflineGraceAvailable(session, now)) return 'plus';
     return DEFAULT_PLAN_ID;

@@ -6,11 +6,12 @@ The extension is an untrusted client. Its JavaScript and `chrome.storage` data c
 
 - `src/auth/deviceManager.ts` creates one random installation UUID and reuses it. Its optional public-key field reserves the activation contract for future device-bound signing.
 - `src/storage/secureStorage.ts` stores revocable device credentials in `chrome.storage.local`, removes legacy raw-license records, and documents the limits of browser storage.
-- `src/auth/authService.ts` owns activation, validation, deactivation, local logout, state transitions, and customer-facing session behavior.
+- `src/auth/authService.ts` owns activation, license checks, logout, state transitions, and customer-facing session behavior.
 - `src/auth/tokenManager.ts` owns access-token expiry, mandatory refresh-token rotation, and the single in-flight refresh promise.
 - `src/auth/entitlementService.ts` normalizes cached entitlement metadata and bounds offline use.
-- `src/api/client.ts` attaches bearer tokens, refreshes after a 401, retries once, prevents refresh loops, and clears credentials after server revocation.
-- `src/lib/licensing.js` is a temporary compatibility facade for the existing popup and cloud-sync modules. It does not contain authentication logic.
+- `src/api/client.ts` attaches bearer tokens, refreshes only for expired/invalid access tokens, retries once, prevents refresh loops, and applies definite 401/403 state changes.
+- `src/auth/licensingService.ts` is loaded by the service worker and owns every licensing API operation.
+- `src/lib/licensing.js` is the popup/service-worker message facade and contains no token or fetch logic.
 
 ## Activation and storage
 
@@ -20,8 +21,10 @@ Activation posts to `/api/v1/licenses/activate`:
 {
   "license_key": "AST-…",
   "product": "text-saver",
-  "device_uuid": "random-persisted-uuid",
-  "device_name": "Chrome on macOS"
+  "device_id": "random-persisted-uuid",
+  "device_name": "Chrome on macOS",
+  "platform": "mac",
+  "app_version": "6.0.0"
 }
 ```
 
@@ -29,33 +32,33 @@ The response must contain `access_token`, `refresh_token`, token expiry informat
 
 ## Authenticated requests and rotation
 
-All protected requests go through `ApiClient` and send `Authorization: Bearer <access_token>`. Feature modules never receive or attach refresh tokens. If an access token is near expiry or a request returns 401, `TokenManager` posts the refresh token to `/api/v1/auth/refresh`.
+All protected requests go through `ApiClient` in the MV3 service worker and send `Authorization: Bearer <access_token>`. Popup and feature modules never receive or attach tokens. If an access token is near expiry, or the backend specifically returns `access_token_expired`/`invalid_access_token`, `TokenManager` posts only the refresh token to `/api/v1/auth/refresh`.
 
-Only one refresh promise can exist. Concurrent requests in one context await it, while a Web Lock coordinates the popup and MV3 service worker contexts. A refresh response must contain a different refresh token; both new tokens replace the previous pair in one storage write before callers retry. Each API request can retry only once.
+Only one refresh promise can exist in the service worker. A refresh response must contain a different refresh token; both new tokens replace the previous pair in one storage write before response metadata is processed or callers retry. Each API request can retry only once.
 
-If the backend reports a revoked device, license, token family, expired license, or expired subscription, credentials are cleared and a specific inactive state is retained for the interface. Network and server failures never become permanent authorization.
+Revoked sessions/devices and invalid or reused refresh tokens clear credentials. Expired and inactive subscriptions keep the session metadata needed to show renewal/billing guidance but receive no paid entitlements. Network, rate-limit, and server failures use only the bounded offline grace window.
 
 ## States and customer messages
 
-Persistent/session states are `inactive`, `activating`, `active`, `refreshing`, `offline_grace`, `expired`, `revoked`, `device_revoked`, and `subscription_expired`. UI code translates backend codes into customer actions; it does not expose token-family or HTTP details.
+Persistent/session states are `inactive`, `activating`, `active`, `refreshing`, `offline_grace`, `offline_locked`, `expired`, `revoked`, `device_revoked`, `subscription_inactive`, and `subscription_expired`. `offline_locked` disables Plus locally after grace without discarding credentials, so a later online check can recover automatically. UI code translates backend codes into customer actions; it does not expose token-family or HTTP details.
 
 Examples:
 
-- `TOKEN_FAMILY_REVOKED` → “Your session has expired. Please activate this device again.”
-- `LICENSE_DEVICE_LIMIT_EXCEEDED` → “You've reached your device limit. Deactivate an old device to activate this one.”
-- `DEVICE_REVOKED` → “This device was deactivated. Activate it again to restore access.”
+- `refresh_token_reused` → “Your session ended because its security token was reused. Please activate this device again.”
+- `device_limit_reached` → “You've reached your device limit. Deactivate an old device to activate this one.”
+- `device_revoked` → “This device was deactivated. Activate it again to restore access.”
 
 ## Entitlements and offline behavior
 
-Cached entitlements can hide or enable local-only controls. They are not proof of authorization. Cloud sync and every other server-backed premium route must independently validate the bearer token, active device, active license/subscription, product, and required feature on the backend.
+Cached entitlements can hide or enable local-only controls. Plan display names never unlock features; Plus behavior is enabled by the `cloud_sync` entitlement. Cached data is not proof of authorization. Cloud sync and every other server-backed premium route must independently validate the bearer token, active device, active license/subscription, product, and required feature on the backend.
 
 After successful server validation, local-only features receive at most three days of offline grace. Grace is capped by the entitlement expiration timestamp and never applies to an already expired or revoked session. Server-backed features still fail while offline. When connectivity returns, normal API use or scheduled validation revalidates the session.
 
 High-value functionality should remain behind server APIs where practical. Fully local premium limits are inherently patchable and should not be presented as tamper-proof licensing.
 
-## Deactivation and logout
+## Devices and logout
 
-Deactivation calls the authenticated `/api/v1/licenses/deactivate` route and clears local credentials after the server releases the device. A temporary network failure preserves credentials so a paid device slot is not silently orphaned. `logoutLocal()` is available for an explicit local-only sign-out flow and makes no claim that the server device was released.
+The device panel uses `GET /api/v1/devices`, `DELETE /api/v1/devices/{id}`, and `POST /api/v1/devices/{id}/revoke`. Revocation is clearly presented as permanent and is disabled for the current device. Signing out calls `/api/v1/auth/logout` and clears local credentials only after the server releases the slot; a temporary failure preserves credentials so a slot is not silently orphaned.
 
 ## Chrome-extension security notes
 

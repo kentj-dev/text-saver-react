@@ -1,6 +1,5 @@
 import { apiClient, type ApiClient } from '../api/client.ts';
 import { ApiError, statusForError } from '../api/errors.ts';
-import { BILLING_CONFIG } from '../lib/config.js';
 import { SecureStorage } from '../storage/secureStorage.ts';
 import { deviceManager, type DeviceManager } from './deviceManager.ts';
 import { entitlementService, type EntitlementService } from './entitlementService.ts';
@@ -10,15 +9,25 @@ import type { AuthSession, DeviceRegistration } from './types.ts';
 type Payload = Record<string, unknown>;
 
 function registration(payload: Payload, fallbackName: string): DeviceRegistration {
-  const raw = payload.activation && typeof payload.activation === 'object'
-    ? payload.activation as Record<string, unknown>
+  const raw = payload.device && typeof payload.device === 'object'
+    ? payload.device as Record<string, unknown>
     : {};
   return {
-    deviceId: raw.device_id == null ? undefined : String(raw.device_id),
+    deviceId: raw.id == null ? undefined : String(raw.id),
     deviceName: String(raw.device_name || fallbackName),
+    platform: raw.platform == null ? undefined : String(raw.platform),
+    appVersion: raw.app_version == null ? undefined : String(raw.app_version),
     activatedAt: raw.activated_at == null ? undefined : String(raw.activated_at),
     lastSeenAt: raw.last_seen_at == null ? undefined : String(raw.last_seen_at),
   };
+}
+
+function statusFromEntitlements(entitlements: ReturnType<EntitlementService['fromPayload']>): AuthSession['status'] {
+  switch (entitlements.licenseStatus?.toLowerCase()) {
+    case 'expired': return 'expired';
+    case 'revoked': return 'revoked';
+    default: return 'active';
+  }
 }
 
 export class AuthService {
@@ -42,7 +51,9 @@ export class AuthService {
   async session(): Promise<AuthSession | null> {
     const session = await this.storage.getSession();
     if (session?.status === 'offline_grace' && !this.entitlements.isOfflineGraceAvailable(session)) {
-      const expired = { ...session, status: 'expired' as const, tokens: undefined, errorCode: 'OFFLINE_GRACE_EXPIRED' };
+      // Lock local paid features, but retain the revocable credentials so the
+      // service worker can recover automatically when connectivity returns.
+      const expired = { ...session, status: 'offline_locked' as const, errorCode: 'OFFLINE_GRACE_EXPIRED' };
       await this.storage.setSession(expired);
       return expired;
     }
@@ -73,7 +84,7 @@ export class AuthService {
       const now = Date.now();
       const deviceRegistration = registration(payload, installation.name);
       const activated: AuthSession = {
-        schemaVersion: 1, status: 'active', deviceUuid: installation.id,
+        schemaVersion: 1, status: statusFromEntitlements(entitlements), deviceUuid: installation.id,
         deviceName: deviceRegistration.deviceName, registration: deviceRegistration,
         tokens, entitlements, lastValidatedAt: now,
         offlineGraceUntil: this.entitlements.offlineGraceUntil(entitlements, now),
@@ -91,13 +102,11 @@ export class AuthService {
     if (!existing?.tokens) return existing;
     if (!force && existing.lastValidatedAt && Date.now() - existing.lastValidatedAt < 12 * 60 * 60 * 1000) return existing;
     try {
-      const payload = await this.api.request<Payload>('/licenses/validate', {
-        method: 'POST', body: { product: BILLING_CONFIG.productSlug, device_uuid: existing.deviceUuid },
-      });
+      const payload = await this.api.request<Payload>('/license', { method: 'GET' });
       const entitlements = this.entitlements.fromPayload(payload);
       const now = Date.now();
       return this.storage.setSession({
-        ...(await this.storage.getSession() || existing), status: 'active', entitlements,
+        ...(await this.storage.getSession() || existing), status: statusFromEntitlements(entitlements), entitlements,
         lastValidatedAt: now, offlineGraceUntil: this.entitlements.offlineGraceUntil(entitlements, now),
         errorCode: undefined,
       });
@@ -108,10 +117,18 @@ export class AuthService {
         return this.storage.setSession({ ...current, status: 'offline_grace', errorCode: error.code });
       }
       if (error.isTemporary) {
-        await this.storage.setSession({ ...current, status: 'expired', errorCode: error.code });
+        await this.storage.setSession({ ...current, status: 'offline_locked', errorCode: error.code });
       }
       if (!error.isTemporary) {
-        await this.storage.setSession({ ...current, status: statusForError(error), tokens: undefined, errorCode: error.code });
+        await this.storage.setSession({
+          ...current,
+          status: statusForError(error),
+          tokens: error.clearsCredentials ? undefined : current.tokens,
+          entitlements: ['LICENSE_EXPIRED', 'SUBSCRIPTION_INACTIVE', 'SUBSCRIPTION_EXPIRED'].includes(error.code)
+            ? current.entitlements && { ...current.entitlements, features: [] }
+            : current.entitlements,
+          errorCode: error.code,
+        });
       }
       throw error;
     }
@@ -121,9 +138,7 @@ export class AuthService {
     const session = await this.storage.getSession();
     if (!session) return;
     try {
-      await this.api.request('/licenses/deactivate', {
-        method: 'POST', body: { product: BILLING_CONFIG.productSlug, device_uuid: session.deviceUuid },
-      });
+      await this.api.request('/auth/logout', { method: 'POST' });
     } catch (error) {
       if (!(error instanceof ApiError) || error.isTemporary) throw error;
     }
