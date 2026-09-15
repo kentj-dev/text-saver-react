@@ -13,7 +13,10 @@ export function AppLayout() {
   if (!state || !activeTab) return <LoadingScreen />;
 
   return (
-    <main className="relative flex h-[590px] w-[760px] flex-col overflow-hidden bg-background p-4 text-foreground" onClick={actions.closeContextMenu}>
+    <main
+      className="relative flex h-[590px] w-[760px] select-none flex-col overflow-hidden bg-background p-4 text-foreground"
+      onClick={actions.closeContextMenu}
+    >
       <AppHeader />
       <TabsToolbar />
       <EditorPanel />

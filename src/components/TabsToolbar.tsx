@@ -39,14 +39,14 @@ function TabItem(props: TabItemProps) {
     <div
       data-id={props.tab.id}
       className={cn(
-        'group flex max-w-44 shrink-0 cursor-grab items-center rounded-md border bg-card text-muted-foreground transition-colors',
-        props.active && 'border-primary/35 bg-accent text-foreground',
-        isInbox(props.tab) && 'border-amber-500/40',
+        'group flex h-9 max-w-44 shrink-0 cursor-grab items-center rounded-md border bg-card text-muted-foreground transition-colors',
+        props.active && 'border-primary/15 bg-accent text-foreground',
+        // isInbox(props.tab) && 'border-amber-500/40',
       )}
       onContextMenu={handleContextMenu}
     >
       <button
-        className="flex min-w-0 items-center gap-2 px-3.5 py-2.5 text-[13px]"
+        className="flex min-w-0 items-center gap-2 px-3.5 py-1.5 text-[13px]"
         title={props.tab.name}
         onClick={() => props.onSwitch(props.tab.id)}
       >
