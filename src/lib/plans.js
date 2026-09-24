@@ -16,7 +16,7 @@ export const PLAN_LIMITS = Object.freeze({
   plus: Object.freeze({
     id: "plus",
     name: "Plus",
-    price: 2.99,
+    price: 1.99,
     maxTabs: 20,
     maxCharactersPerTab: 20000,
     maxLinesPerTab: 10000,

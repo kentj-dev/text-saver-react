@@ -387,13 +387,13 @@ function UpgradePanel() {
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-500">
-            One-time upgrade
+            Monthly subscription
           </p>
           <h2 className="mt-1 text-lg font-semibold">Plus</h2>
         </div>
         <div className="text-right">
-          <p className="text-lg font-semibold">$2.99</p>
-          <p className="text-[10px] text-muted-foreground">lifetime</p>
+          <p className="text-lg font-semibold">$1.99</p>
+          <p className="text-[10px] text-muted-foreground">per month</p>
         </div>
       </div>
 
